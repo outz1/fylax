@@ -8,6 +8,7 @@ import {
   TARGET_KINDS,
   TARGET_PLATFORMS,
 } from '@fylax/core';
+import { validateScopeEntry } from '@fylax/scope';
 import { ValidationFailedError } from './errors';
 
 export function parse<S extends z.ZodType>(schema: S, input: unknown): z.output<S> {
@@ -37,13 +38,19 @@ export const findingsQuerySchema = z.object({
   module: z.enum(CHECK_MODULES).optional(),
 });
 
-const scopeEntrySchema = z.object({
-  kind: z.enum(SCOPE_ENTRY_KINDS),
-  value: z.string().trim().min(1),
-  ports: z.array(z.number().int().min(1).max(65535)).optional(),
-});
+export const scopeEntrySchema = z
+  .object({
+    kind: z.enum(SCOPE_ENTRY_KINDS),
+    value: z.string().trim().min(1),
+    ports: z.array(z.number().int().min(1).max(65535)).optional(),
+  })
+  .superRefine((entry, ctx) => {
+    // Recusa wildcard amplo (*.com), CIDR que abrange a internet (0.0.0.0/0) e URL sem http(s).
+    const problema = validateScopeEntry(entry);
+    if (problema) ctx.addIssue({ code: 'custom', message: problema, path: ['value'] });
+  });
 
-const programRulesSchema = z.object({
+export const programRulesSchema = z.object({
   automation: z.enum(AUTOMATION_POLICIES),
   maxRequestsPerSecond: z.number().positive(),
   requiredHeaders: z.record(z.string(), z.string()).optional(),

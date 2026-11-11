@@ -22,3 +22,4 @@ R1 (AAAA-MM-DD): hipótese ... | por que caiu: ... | evidência: evidencias/...
 ## Índice
 
 - [FASE-0](FASE-0.md): decisões de implementação da fundação (stack, validação, convenções de checkId e rede).
+- [FASE-1](FASE-1.md): decisões do Scope Guard, do ScopedHttpClient e do kill switch (bloqueios, escopo, redirects, firewall).

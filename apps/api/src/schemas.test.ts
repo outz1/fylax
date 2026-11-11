@@ -83,6 +83,21 @@ describe('createProgramSchema', () => {
     );
   });
 
+  it('rejeita escopo amplo demais (wildcard de TLD, CIDR da internet, URL sem http)', () => {
+    for (const entrada of [
+      { kind: 'wildcard', value: '*.com' },
+      { kind: 'cidr', value: '0.0.0.0/0' },
+      { kind: 'urlPrefix', value: 'ftp://exemplo.com/*' },
+    ]) {
+      expect(() => parse(createProgramSchema, { ...base, inScope: [entrada] })).toThrow(
+        ValidationFailedError,
+      );
+      expect(() => parse(createProgramSchema, { ...base, outOfScope: [entrada] })).toThrow(
+        ValidationFailedError,
+      );
+    }
+  });
+
   it('rejeita automation inválido', () => {
     expect(() =>
       parse(createProgramSchema, { ...base, rules: { ...base.rules, automation: 'sim' } }),
