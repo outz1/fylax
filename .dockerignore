@@ -1,0 +1,12 @@
+# Nada de segredo nem de artefato local entra na imagem.
+.git
+.env
+**/.env
+**/.env.*
+!**/.env.example
+**/*.ovpn
+**/node_modules
+**/dist
+evidencias
+.dist
+infra/vpn/lab.ovpn
