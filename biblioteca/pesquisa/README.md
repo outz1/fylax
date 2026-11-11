@@ -21,4 +21,4 @@ R1 (AAAA-MM-DD): hipótese ... | por que caiu: ... | evidência: evidencias/...
 
 ## Índice
 
-<!-- - [PROBLEMA](PROBLEMA.md): uma linha -->
+- [FASE-0](FASE-0.md): decisões de implementação da fundação (stack, validação, convenções de checkId e rede).
