@@ -1,0 +1,18 @@
+# segredos
+**/.env
+**/.env.*
+!**/.env.example
+
+# evidências brutas (podem conter dado sensível)
+evidencias/*
+!evidencias/README.md
+
+# dependências e build
+node_modules/
+dist/
+.DS_Store
+
+# fylax (exigido por docs/AGENT-GUIDE.md)
+**/*.ovpn
+infra/vpn/*.ovpn
+programs/*.local.yaml
