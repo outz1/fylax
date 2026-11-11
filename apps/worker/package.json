@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fylax/checks": "workspace:*",
     "@fylax/core": "workspace:*",
     "@fylax/db": "workspace:*",
     "@fylax/http": "workspace:*",

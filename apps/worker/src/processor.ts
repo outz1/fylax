@@ -11,6 +11,7 @@ import {
   type ScanProfile,
   type ScanQueueName,
   type ScopedHttpClient,
+  type ScopedNmap,
   type TargetRef,
 } from '@fylax/core';
 import { assetDedupKey } from '@fylax/db';
@@ -39,6 +40,8 @@ export interface ProcessorDeps {
   readOvpn: (path: string) => string | undefined;
   /** Cliente HTTP do scan, já com Scope Guard, rate limit e auditoria. */
   makeHttp: (args: HttpFactoryArgs) => ScopedHttpClient;
+  /** nmap do scan: única forma de executá-lo, sob o Scope Guard e com auditoria tool.exec. */
+  makeNmap: (args: HttpFactoryArgs) => ScopedNmap;
   assetSinkFor: (scanId: string) => AssetSink;
   checkTimeoutMs?: number;
   cancelPollMs?: number;
@@ -67,6 +70,13 @@ function seedAssets(target: TargetRef): Asset[] {
     ? [{ type: 'service', data: { ...base, host: target.value } }]
     : [{ type: 'url', data: { ...base, url: target.value } }];
 }
+
+/** O nmap nunca roda em check passivo nem em scan passivo: a tentativa vira erro do check. */
+const refuseNmap: ScopedNmap = {
+  scan: async () => {
+    throw new Error('nmap não roda em perfil ou check passivo');
+  },
+};
 
 /** Força `passive: true` em todo request (checks passivos e escopos que proíbem automação). */
 function passiveOnly(client: ScopedHttpClient): ScopedHttpClient {
@@ -184,6 +194,7 @@ export class ScanProcessor {
     for (const module of byModule.keys()) await this.prepareTask(scanId, module);
 
     const http = this.d.makeHttp({ scanId, profile, context });
+    const nmap = this.d.makeNmap({ scanId, profile, context });
     const assetSink = this.d.assetSinkFor(scanId);
 
     const known: Asset[] = seedAssets(target);
@@ -225,10 +236,13 @@ export class ScanProcessor {
           if (!known.some((a) => check.appliesTo(a))) continue;
           ran++;
 
+          const passive = check.passive === true || onlyPassive;
           const ctx: CheckContext = {
             scanId,
             target,
-            http: check.passive || onlyPassive ? passiveOnly(http) : http,
+            profile,
+            http: passive ? passiveOnly(http) : http,
+            nmap: passive ? refuseNmap : nmap,
             assets: known,
             emitAsset,
           };
@@ -291,7 +305,7 @@ export class ScanProcessor {
 
   /** Timeout por check e cancelamento: o runner segue mesmo que o check ignore o `signal`. */
   private runCheck(check: Check, ctx: CheckContext, cancel: AbortSignal): Promise<Finding[]> {
-    const timeoutMs = this.d.checkTimeoutMs ?? 60_000;
+    const timeoutMs = check.timeoutMs ?? this.d.checkTimeoutMs ?? 60_000;
     const timeout = AbortSignal.timeout(timeoutMs);
     const signal = AbortSignal.any([cancel, timeout]);
 

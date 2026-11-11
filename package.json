@@ -17,7 +17,9 @@
     "db:migrate": "pnpm --filter @fylax/api db:migrate",
     "db:studio": "pnpm --filter @fylax/api db:studio",
     "scan": "pnpm --filter @fylax/api scan",
-    "worker": "pnpm --filter @fylax/worker start"
+    "worker": "pnpm --filter @fylax/worker start",
+    "lab:up": "docker compose --profile lab up -d --build",
+    "lab:down": "docker compose --profile lab rm -sf lab-web lab-tls lab-ssh lab-redis lab-gw worker-local"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

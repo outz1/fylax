@@ -5,7 +5,10 @@ import type {
   CheckModule,
   Finding,
   ScanProfile,
+  NmapRequest,
+  NmapResult,
   ScopedHttpClient,
+  ScopedNmap,
   ScopedRequest,
   TargetPlatform,
 } from '@fylax/core';
@@ -23,6 +26,14 @@ class FakeHttp implements ScopedHttpClient {
   async request(req: ScopedRequest) {
     this.requests.push(req);
     return { status: 200, headers: {}, body: '', bytes: 0 };
+  }
+}
+
+class FakeNmap implements ScopedNmap {
+  readonly calls: NmapRequest[] = [];
+  async scan(req: NmapRequest): Promise<NmapResult> {
+    this.calls.push(req);
+    return { hosts: [], durationMs: 1 };
   }
 }
 
@@ -55,6 +66,7 @@ function finding(checkId: string, dedupKey = 'k1'): Finding {
 
 function setup(checks: Check[], over: Partial<ProcessorDeps> = {}) {
   const http = new FakeHttp();
+  const nmap = new FakeNmap();
   const factoryCalls: HttpFactoryArgs[] = [];
   const processor = new ScanProcessor({
     prisma,
@@ -66,11 +78,12 @@ function setup(checks: Check[], over: Partial<ProcessorDeps> = {}) {
       factoryCalls.push(args);
       return http;
     },
+    makeNmap: () => nmap,
     assetSinkFor: (scanId) => new PrismaAssetSink(prisma, scanId),
     cancelPollMs: 20,
     ...over,
   });
-  return { processor, http, factoryCalls };
+  return { processor, http, nmap, factoryCalls };
 }
 
 async function programa(automation: 'allowed' | 'unspecified' | 'forbidden') {
@@ -270,6 +283,36 @@ describe('escopo e confirmação (falha fechada)', () => {
     expect(await prisma.task.count({ where: { scanId: id } })).toBe(0);
   });
 
+  it('lab local roda só na fila scans-local; htb e thm só na scans-lab', async () => {
+    const local = await novoScan({ platform: 'local' });
+    const htb = await novoScan({ platform: 'htb' });
+    let rodou = 0;
+    const checks = [
+      check('recon.x', async () => {
+        rodou++;
+        return [];
+      }),
+    ];
+
+    // worker da VPN (scans-lab) recusa o scan local
+    expect(await setup(checks, { queue: 'scans-lab' }).processor.process(local)).toBe('failed');
+    expect((await prisma.scan.findUniqueOrThrow({ where: { id: local } })).error).toMatch(
+      /plataforma "local" não é atendida pela fila scans-lab/,
+    );
+    expect(rodou).toBe(0);
+
+    // worker local (scans-local) recusa o scan de HTB
+    expect(await setup(checks, { queue: 'scans-local' }).processor.process(htb)).toBe('failed');
+    expect((await prisma.scan.findUniqueOrThrow({ where: { id: htb } })).error).toMatch(
+      /plataforma "htb" não é atendida pela fila scans-local/,
+    );
+
+    // e cada um executa o seu
+    const local2 = await novoScan({ platform: 'local' });
+    expect(await setup(checks, { queue: 'scans-local' }).processor.process(local2)).toBe('done');
+    expect(rodou).toBe(1);
+  });
+
   it('plataforma de outra fila não executa neste worker', async () => {
     const prog = await programa('allowed');
     const id = await novoScan({ platform: 'bounty', kind: 'url', programId: prog.id });
@@ -370,6 +413,62 @@ describe('escopo e confirmação (falha fechada)', () => {
     const s3 = setup([ativo, passivo]);
     expect(await s3.processor.process(c)).toBe('done');
     expect(await prisma.finding.count({ where: { scanId: c } })).toBe(2);
+  });
+});
+
+describe('nmap e perfil no contexto do check', () => {
+  it('o check ativo recebe o profile do scan e o nmap; o passivo recebe um nmap que recusa', async () => {
+    let perfil: string | undefined;
+    const ativo = check('recon.ativo', async (ctx) => {
+      perfil = ctx.profile;
+      await ctx.nmap.scan({ host: '10.250.0.10', profile: 'standard' });
+      return [];
+    });
+    const passivo = check(
+      'recon.passivo',
+      async (ctx) => {
+        await ctx.nmap.scan({ host: '10.250.0.10', profile: 'standard' });
+        return [];
+      },
+      { passive: true },
+    );
+
+    const id = await novoScan({ profile: 'deep' });
+    const s = setup([ativo, passivo]);
+    expect(await s.processor.process(id)).toBe('done');
+    expect(perfil).toBe('deep');
+    expect(s.nmap.calls).toHaveLength(1); // só o ativo chegou ao nmap
+    const task = await prisma.task.findFirstOrThrow({ where: { scanId: id } });
+    expect(task.status).toBe('failed');
+    expect(task.error).toContain('recon.passivo: nmap não roda em perfil ou check passivo');
+  });
+
+  it('em perfil passive nenhum check ativo roda, então o nmap nunca é chamado', async () => {
+    const id = await novoScan({ profile: 'passive' });
+    const s = setup([
+      check('recon.ativo', async (ctx) => {
+        await ctx.nmap.scan({ host: 'x', profile: 'standard' });
+        return [];
+      }),
+    ]);
+    expect(await s.processor.process(id)).toBe('done');
+    expect(s.nmap.calls).toHaveLength(0);
+  });
+
+  it('programa com automation forbidden: o nmap é recusado mesmo num check marcado como passivo ou não', async () => {
+    const prog = await programa('forbidden');
+    const id = await novoScan({ platform: 'bounty', kind: 'url', programId: prog.id });
+    const s = setup(
+      [
+        check('recon.ativo', async (ctx) => {
+          await ctx.nmap.scan({ host: 'x', profile: 'standard' });
+          return [];
+        }),
+      ],
+      { queue: 'scans-bounty' },
+    );
+    expect(await s.processor.process(id)).toBe('done');
+    expect(s.nmap.calls).toHaveLength(0); // check ativo nem foi selecionado
   });
 });
 

@@ -2,8 +2,8 @@
 # então herda o firewall e o kill switch. Contexto de build: a raiz do repositório.
 FROM node:24-alpine
 
-# openssl: engine do Prisma em musl. A etapa 2b acrescenta nmap e nmap-scripts.
-RUN apk add --no-cache openssl libc6-compat && corepack enable
+# openssl: engine do Prisma em musl. nmap e nmap-scripts: port scan e scripts banner e ssl-cert (2b).
+RUN apk add --no-cache openssl libc6-compat nmap nmap-scripts && corepack enable
 
 WORKDIR /app
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./

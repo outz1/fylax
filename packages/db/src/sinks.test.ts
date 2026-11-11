@@ -5,6 +5,7 @@ import { PrismaAssetSink, PrismaAuditSink, assetDedupKey } from './sinks';
 
 const prisma = new PrismaClient();
 const sufixo = `${process.pid}-${Date.now()}`;
+const marcador = randomUUID(); // identifica a linha de audit sem scanId que este teste cria
 let scanId = '';
 
 beforeAll(async () => {
@@ -16,6 +17,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await prisma.auditLog.deleteMany({ where: { scanId } });
+  await prisma.auditLog.deleteMany({ where: { detail: { path: ['n'], equals: marcador } } });
   await prisma.asset.deleteMany({ where: { scanId } });
   await prisma.scan.deleteMany({ where: { id: scanId } });
   await prisma.target.deleteMany({ where: { value: { contains: sufixo } } });
@@ -54,7 +56,7 @@ describe('sinks no Postgres', () => {
   it('PrismaAuditSink grava a ação, o scanId e o detalhe', async () => {
     const sink = new PrismaAuditSink(prisma);
     await sink.record({ scanId, action: 'tool.exec', detail: { tool: 'x' } });
-    await sink.record({ action: 'scope.block', detail: { n: randomUUID() } });
+    await sink.record({ action: 'scope.block', detail: { n: marcador } });
     const rows = await prisma.auditLog.findMany({ where: { scanId } });
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ action: 'tool.exec', detail: { tool: 'x' } });
