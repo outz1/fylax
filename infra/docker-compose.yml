@@ -1,6 +1,7 @@
-# Fase 0: postgres e redis. O serviço `vpn` entra na fase 1.
+# Fase 0: postgres e redis. Fase 1: serviço `vpn` (kill switch) e sonda de rede.
 # Portas publicadas só em 127.0.0.1 (nada exposto na LAN).
 name: fylax
+
 services:
   postgres:
     image: postgres:16
@@ -13,6 +14,9 @@ services:
       - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      fylax_net:
+        ipv4_address: 172.31.250.10
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 5s
@@ -26,11 +30,53 @@ services:
       - '127.0.0.1:${REDIS_PORT:-6379}:6379'
     volumes:
       - redisdata:/data
+    networks:
+      fylax_net:
+        ipv4_address: 172.31.250.11
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # OpenVPN com kill switch por firewall. Workers de lab usam `network_mode: "service:vpn"`.
+  # Sem infra/vpn/lab.ovpn o container fica de pé, firewall fechado e não saudável.
+  vpn:
+    build: ./vpn
+    image: fylax-vpn:local
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: '1'
+    environment:
+      OVPN_FILE: /vpn/lab.ovpn
+      LAB_CIDRS: ${LAB_CIDRS:-}
+      # Único caminho permitido do namespace do worker até o banco e a fila.
+      ALLOW_INTERNAL: '172.31.250.10:5432,172.31.250.11:6379'
+    volumes:
+      - ./vpn:/vpn:ro
+    networks:
+      fylax_net:
+        ipv4_address: 172.31.250.2
+
+  # Sonda manual: roda no namespace do vpn, como um worker. Ver infra/vpn/README.md.
+  net-probe:
+    image: alpine:3.20
+    profiles: ['probe']
+    network_mode: 'service:vpn'
+    depends_on:
+      - vpn
+    command: ['sleep', 'infinity']
+
+networks:
+  fylax_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24
 
 volumes:
   pgdata:
