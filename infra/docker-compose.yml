@@ -98,12 +98,109 @@ services:
       - vpn
     command: ['sleep', 'infinity']
 
+  # ---------------------------------------------------------------------------------------------
+  # Lab local de fixtures (perfil `lab`): 10.250.0.0/24, rede INTERNA (sem saída para a internet).
+  # `pnpm lab:up` sobe tudo; `pnpm lab:down` derruba só o lab. Alvos de teste conhecidos, para
+  # verificar o scanner sem tocar em nenhum alvo real.
+  # ---------------------------------------------------------------------------------------------
+  lab-web:
+    build: ./lab/web
+    image: fylax-lab-web:local
+    profiles: ['lab']
+    restart: unless-stopped
+    networks:
+      fylax_lab:
+        ipv4_address: 10.250.0.10
+
+  lab-tls:
+    build: ./lab/tls
+    image: fylax-lab-tls:local
+    profiles: ['lab']
+    restart: unless-stopped
+    networks:
+      fylax_lab:
+        ipv4_address: 10.250.0.11
+
+  lab-ssh:
+    build: ./lab/ssh
+    image: fylax-lab-ssh:local
+    profiles: ['lab']
+    restart: unless-stopped
+    networks:
+      fylax_lab:
+        ipv4_address: 10.250.0.12
+
+  lab-redis:
+    image: redis:7-alpine
+    profiles: ['lab']
+    restart: unless-stopped
+    networks:
+      fylax_lab:
+        ipv4_address: 10.250.0.13
+
+  # Gateway do worker local: mesma imagem do vpn, sem OpenVPN. Firewall em default DROP; só alcança
+  # o lab (10.250.0.0/24) e o Postgres e o Redis (ALLOW_INTERNAL).
+  lab-gw:
+    build: ./vpn
+    image: fylax-vpn:local
+    profiles: ['lab']
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: '1'
+    environment:
+      LOCAL_LAB_CIDR: 10.250.0.0/24
+      ALLOW_INTERNAL: '172.31.250.10:5432,172.31.250.11:6379'
+    healthcheck:
+      # Saudável = firewall fechado aplicado (aqui não há tun0).
+      test: ['CMD-SHELL', "iptables -S OUTPUT | grep -q 'P OUTPUT DROP'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      fylax_net:
+        ipv4_address: 172.31.250.3
+      fylax_lab:
+        ipv4_address: 10.250.0.2
+
+  # Worker do lab local: consome scans-local no namespace do lab-gw (firewall próprio).
+  worker-local:
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+    image: fylax-worker:local
+    profiles: ['lab']
+    restart: unless-stopped
+    network_mode: 'service:lab-gw'
+    depends_on:
+      lab-gw:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      FYLAX_WORKER_IN_VPN: '1' # o firewall do lab-gw faz o papel do kill switch
+      WORKER_QUEUE: scans-local
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fylax}?schema=public
+      REDIS_URL: redis://redis:6379
+      # Só o lab local: não herda o LAB_CIDRS do .env (que é das redes de VPN, HTB e THM).
+      LAB_CIDRS: 10.250.0.0/24
+      FYLAX_LAN_CIDRS: ${FYLAX_LAN_CIDRS:-}
+
 networks:
   fylax_net:
     driver: bridge
     ipam:
       config:
         - subnet: 172.31.250.0/24
+  fylax_lab:
+    driver: bridge
+    internal: true # sem rota para fora: as fixtures nunca falam com a internet
+    ipam:
+      config:
+        - subnet: 10.250.0.0/24
 
 volumes:
   pgdata:

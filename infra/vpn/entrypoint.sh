@@ -79,6 +79,18 @@ for item in $(echo "${ALLOW_INTERNAL:-}" | tr ',' ' '); do
   log "permitido: $host:$port/tcp (serviço interno)"
 done
 
+# ---------------------------------------------------------------- 2b. modo "lab local" (sem VPN)
+# Gateway do lab de fixtures: o worker local compartilha este namespace e só alcança esta rede.
+if [ -n "${LOCAL_LAB_CIDR:-}" ]; then
+  echo "$LOCAL_LAB_CIDR" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$' ||
+    fail_closed "LOCAL_LAB_CIDR inválido: '$LOCAL_LAB_CIDR'"
+  [ "${LOCAL_LAB_CIDR#*/}" -ge 16 ] || fail_closed "LOCAL_LAB_CIDR amplo demais: '$LOCAL_LAB_CIDR' (prefixo mínimo /16)"
+  iptables -A OUTPUT -d "$LOCAL_LAB_CIDR" -j ACCEPT
+  log "permitido: $LOCAL_LAB_CIDR (lab local, sem VPN)"
+  log "modo lab local: o OpenVPN NÃO é iniciado"
+  exec tail -f /dev/null
+fi
+
 # ---------------------------------------------------------------- 3. configuração do lab
 [ -f "$OVPN" ] || fail_closed "não encontrei $OVPN (coloque o .ovpn em infra/vpn/lab.ovpn)"
 
