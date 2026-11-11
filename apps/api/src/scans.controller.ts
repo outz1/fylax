@@ -25,4 +25,23 @@ export class ScansController {
   findings(@Param('id') id: string, @Query() query: unknown) {
     return this.scans.listFindings(id, query);
   }
+
+  /** 202: aceito para execução (ou aguardando confirmação humana). */
+  @Post(':id/run')
+  @HttpCode(202)
+  run(@Param('id') id: string) {
+    return this.scans.runScan(id);
+  }
+
+  @Post(':id/confirm')
+  @HttpCode(200)
+  confirm(@Param('id') id: string) {
+    return this.scans.confirmScan(id);
+  }
+
+  @Post(':id/cancel')
+  @HttpCode(200)
+  cancel(@Param('id') id: string) {
+    return this.scans.cancelScan(id);
+  }
 }

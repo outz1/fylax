@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { loadEnv } from './env';
+import { loadEnv } from '@fylax/db';
 
 async function bootstrap(): Promise<void> {
   loadEnv();

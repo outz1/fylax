@@ -14,7 +14,7 @@ import {
 } from '@fylax/scope';
 import { NotFoundError, ValidationFailedError } from './errors';
 import { parse, programRulesSchema, scopeEntrySchema } from './schemas';
-import { PrismaAuditSink } from './sinks';
+import { PrismaAuditSink } from '@fylax/db';
 
 export interface ScopeCheckArgs {
   destination: string;
