@@ -37,13 +37,14 @@ describe('BullScanEnqueuer (Redis real)', () => {
   const ids: string[] = [];
 
   afterAll(async () => {
-    const lab = new Queue(SCAN_QUEUES.lab, { connection: redisConnection(url) });
-    const bounty = new Queue(SCAN_QUEUES.bounty, { connection: redisConnection(url) });
+    // As três filas: com um worker consumindo, o job de teste pode ter sido concluído e retido.
+    const filas = [SCAN_QUEUES.lab, SCAN_QUEUES.local, SCAN_QUEUES.bounty].map(
+      (nome) => new Queue(nome, { connection: redisConnection(url) }),
+    );
     for (const id of ids) {
-      await (await lab.getJob(id))?.remove().catch(() => undefined);
-      await (await bounty.getJob(id))?.remove().catch(() => undefined);
+      for (const fila of filas) await (await fila.getJob(id))?.remove().catch(() => undefined);
     }
-    await Promise.all([lab.close(), bounty.close(), enqueuer.close()]);
+    await Promise.all([...filas.map((f) => f.close()), enqueuer.close()]);
   });
 
   it('roteia por plataforma e é idempotente pelo scanId', async () => {

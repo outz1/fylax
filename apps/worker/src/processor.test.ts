@@ -519,6 +519,114 @@ describe('isolamento de erro e timeout', () => {
   });
 });
 
+describe('portão do check: nada novo sai depois de cancelado, expirado ou terminado', () => {
+  type Resultado = { http?: string; nmap?: string; asset?: string };
+
+  /** Check mal-comportado: ignora o signal e, depois de `espera` ms, tenta usar a rede e gravar asset. */
+  function mal(id: string, espera: number, r: Resultado): Check {
+    const tenta = async (campo: keyof Resultado, fn: () => Promise<unknown>) => {
+      try {
+        await fn();
+        r[campo] = 'executou';
+      } catch (e) {
+        r[campo] = (e as Error).message;
+      }
+    };
+    return check(id, async (ctx) => {
+      await sleep(espera);
+      await tenta('http', () => ctx.http.request({ method: 'GET', url: 'http://10.250.0.10/' }));
+      await tenta('nmap', () => ctx.nmap.scan({ host: '10.250.0.10', profile: 'standard' }));
+      await tenta('asset', () => ctx.emitAsset({ type: 'port', data: { port: 1 } }));
+      return [];
+    });
+  }
+
+  const recusados = (r: Resultado) => {
+    expect(r.http).toMatch(/recusado/);
+    expect(r.nmap).toMatch(/recusado/);
+    expect(r.asset).toMatch(/recusado/);
+  };
+
+  it('depois do TIMEOUT, o check que ignora o signal não gera request, nmap nem asset', async () => {
+    const id = await novoScan();
+    const r: Resultado = {};
+    const s = setup([mal('recon.zumbi', 150, r)], { checkTimeoutMs: 50 });
+
+    expect(await s.processor.process(id)).toBe('done');
+    expect((await prisma.task.findFirstOrThrow({ where: { scanId: id } })).error).toMatch(
+      /timeout de 50 ms/,
+    );
+
+    await sleep(350); // o zumbi acorda e tenta
+    recusados(r);
+    expect(s.http.requests).toHaveLength(0);
+    expect(s.nmap.calls).toHaveLength(0);
+    expect(await prisma.asset.count({ where: { scanId: id } })).toBe(0);
+  });
+
+  it('depois do CANCELAMENTO, idem', async () => {
+    const id = await novoScan();
+    const r: Resultado = {};
+    const s = setup([mal('recon.zumbi', 250, r)]);
+
+    const rodando = s.processor.process(id);
+    await sleep(80);
+    await prisma.scan.update({
+      where: { id },
+      data: { status: 'canceled', finishedAt: new Date() },
+    });
+    expect(await rodando).toBe('canceled');
+
+    await sleep(400);
+    recusados(r);
+    expect(s.http.requests).toHaveLength(0);
+    expect(s.nmap.calls).toHaveLength(0);
+    expect(await prisma.asset.count({ where: { scanId: id } })).toBe(0);
+  });
+
+  it('depois que o check TERMINA, um timer esquecido por ele não consegue mais usar a rede', async () => {
+    const id = await novoScan();
+    const r: Resultado = {};
+    const s = setup([
+      check('recon.legitimo', async (ctx) => {
+        await ctx.http.request({ method: 'GET', url: 'http://10.250.0.10/' }); // uso normal: funciona
+        // deixa um timer para depois de terminar
+        setTimeout(() => {
+          ctx.http.request({ method: 'GET', url: 'http://10.250.0.10/x' }).then(
+            () => (r.http = 'executou'),
+            (e: Error) => (r.http = e.message),
+          );
+        }, 80);
+        return [];
+      }),
+    ]);
+
+    expect(await s.processor.process(id)).toBe('done');
+    await sleep(250);
+    expect(r.http).toMatch(/recusado/);
+    expect(s.http.requests.map((q) => q.url)).toEqual(['http://10.250.0.10/']); // só a chamada legítima
+  });
+
+  it('o portão não atrapalha o uso normal: http, nmap e emitAsset funcionam durante o check', async () => {
+    const id = await novoScan();
+    const r: Resultado = {};
+    const s = setup([
+      check('recon.normal', async (ctx) => {
+        await ctx.http.request({ method: 'GET', url: 'http://10.250.0.10/' });
+        await ctx.nmap.scan({ host: '10.250.0.10', profile: 'standard' });
+        await ctx.emitAsset({ type: 'port', data: { port: 1 } });
+        r.http = 'ok';
+        return [];
+      }),
+    ]);
+    expect(await s.processor.process(id)).toBe('done');
+    expect(r.http).toBe('ok');
+    expect(s.http.requests).toHaveLength(1);
+    expect(s.nmap.calls).toHaveLength(1);
+    expect(await prisma.asset.count({ where: { scanId: id } })).toBe(1);
+  });
+});
+
 describe('cancelamento', () => {
   it('14. cancel interrompe o check em curso e nenhum passo novo começa', async () => {
     const id = await novoScan();
