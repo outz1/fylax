@@ -95,6 +95,30 @@ export interface ScopedResponse {
   headers: Record<string, string>;
   body: string;
   bytes: number;
+  /** true se o corpo passou do limite e foi cortado. */
+  truncated?: boolean;
+  /** Presente quando a resposta é um redirect que não foi seguido. */
+  redirect?: { location: string; followed: false; reason: string };
+}
+
+export const AUDIT_ACTIONS = ['scope.allow', 'scope.block', 'http.request', 'tool.exec'] as const;
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
+export interface AuditEntry {
+  scanId?: string | null;
+  action: AuditAction;
+  /** Nunca incluir corpo de resposta, valores de header ou valores de query (podem ser segredo). */
+  detail: Record<string, unknown>;
+}
+
+/** Destino do AuditLog. Se `record` falhar, quem chama NÃO deve enviar tráfego (fail closed). */
+export interface AuditSink {
+  record(entry: AuditEntry): Promise<void>;
+}
+
+/** Destino de assets descobertos durante um scan (já vinculado ao scan). */
+export interface AssetSink {
+  record(asset: Asset): Promise<void>;
 }
 
 /** Única API de rede do projeto. Implementação na fase 1 (packages/http). */
