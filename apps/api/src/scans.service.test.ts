@@ -2,9 +2,10 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { NotFoundError, ValidationFailedError } from './errors';
 import { ScansService } from './scans.service';
+import { FakeEnqueuer } from './testing';
 
 const prisma = new PrismaClient();
-const service = new ScansService(prisma);
+const service = new ScansService(prisma, new FakeEnqueuer());
 
 // Valor único por execução: não colide com dados reais e permite limpar só o que o teste criou.
 const alvo = (sufixo: string) => `teste-${process.pid}-${Date.now()}-${sufixo}.invalid`;

@@ -99,6 +99,10 @@ model Scan {
   status     ScanStatus  @default(queued)
   startedAt  DateTime?
   finishedAt DateTime?
+  // Confirmação humana (programa com automation unspecified). Fase 2.
+  confirmedAt DateTime?
+  // Motivo de falha do scan (sem contexto de escopo, confirmação ausente, etc.).
+  error      String?
   createdAt  DateTime    @default(now())
   tasks      Task[]
   assets     Asset[]
@@ -122,7 +126,11 @@ model Asset {
   scan      Scan     @relation(fields: [scanId], references: [id])
   type      String // port | service | url | endpoint | tool
   data      Json
+  // sha256(type + data estável): reprocessar o scan não duplica assets.
+  dedupKey  String?
   createdAt DateTime @default(now())
+
+  @@unique([scanId, dedupKey])
 }
 
 model Finding {

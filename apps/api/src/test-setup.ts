@@ -1,4 +1,4 @@
 import 'reflect-metadata';
-import { loadEnv } from './env';
+import { loadEnv } from '@fylax/db';
 
 loadEnv();

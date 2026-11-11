@@ -4,7 +4,9 @@ import { Test } from '@nestjs/testing';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { SCAN_ENQUEUER } from '@fylax/queue';
 import { AppModule } from './app.module';
+import { FakeEnqueuer } from './testing';
 
 let app: INestApplication;
 const prisma = new PrismaClient();
@@ -12,7 +14,10 @@ const valor = `rest-${process.pid}-${Date.now()}.invalid`;
 const nomePrograma = `programa-${process.pid}-${Date.now()}`;
 
 beforeAll(async () => {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(SCAN_ENQUEUER)
+    .useValue(new FakeEnqueuer())
+    .compile();
   app = moduleRef.createNestApplication();
   await app.init();
 });
