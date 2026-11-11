@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@fylax/core": "workspace:*",
-    "ipaddr.js": "^2.2.0"
+    "ipaddr.js": "^2.2.0",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

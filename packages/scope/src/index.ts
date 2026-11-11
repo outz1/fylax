@@ -8,6 +8,16 @@ export {
 } from './resolver';
 export { SystemDnsResolver, type DnsResolver, type DnsResult } from './dns';
 export { parseOvpnRoutes } from './ovpn';
+export { scopeEntrySchema, programRulesSchema } from './schemas';
+export {
+  ScopeContextError,
+  needsConfirmation,
+  parseProgramScope,
+  resolveScanContext,
+  type ProgramRow,
+  type ScanContextEnv,
+  type ScanContextInput,
+} from './context';
 export { redactUrl } from './redact';
 export { validateCidr, validateScopeEntry } from './validate';
 export { ABSOLUTE_BLOCKS } from './net';

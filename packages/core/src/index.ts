@@ -101,7 +101,14 @@ export interface ScopedResponse {
   redirect?: { location: string; followed: false; reason: string };
 }
 
-export const AUDIT_ACTIONS = ['scope.allow', 'scope.block', 'http.request', 'tool.exec'] as const;
+export const AUDIT_ACTIONS = [
+  'scope.allow',
+  'scope.block',
+  'http.request',
+  'tool.exec',
+  'scan.confirm',
+  'scan.cancel',
+] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 export interface AuditEntry {
@@ -130,17 +137,37 @@ export interface CheckContext {
   scanId: string;
   target: TargetRef;
   http: ScopedHttpClient;
+  /** Assets conhecidos até agora (inclui os emitidos por checks anteriores). */
   assets: Asset[];
+  /** Persiste (sem duplicar) e disponibiliza o asset para os checks seguintes. */
+  emitAsset(asset: Asset): Promise<void>;
+  /** Dispara quando o scan é cancelado ou o check estoura o timeout. */
+  signal?: AbortSignal;
   auth?: AuthSession;
 }
 
 export interface Check {
+  /** "<módulo>.<nome>" (ex.: "recon.tls-expired"); o runner rejeita findings fora do módulo. */
   id: string;
   module: CheckModule;
   severity: Severity;
   references: string[];
+  /** true: só recon passivo (roda no perfil passive e nunca faz request ativo). Padrão: ativo. */
+  passive?: boolean;
   appliesTo(asset: Asset): boolean;
   run(ctx: CheckContext): Promise<Finding[]>;
+}
+
+/** Filas por modo: lab (worker no namespace do vpn) e bounty (worker sem a VPN de lab, fase 6). */
+export const SCAN_QUEUES = { lab: 'scans-lab', bounty: 'scans-bounty' } as const;
+export type ScanQueueName = (typeof SCAN_QUEUES)[keyof typeof SCAN_QUEUES];
+
+export interface ScanJob {
+  scanId: string;
+}
+
+export function queueForPlatform(platform: TargetPlatform): ScanQueueName {
+  return platform === 'bounty' ? SCAN_QUEUES.bounty : SCAN_QUEUES.lab;
 }
 
 export interface ScanSummary {
