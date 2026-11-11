@@ -8,6 +8,11 @@ export interface Target {
   ips: ParsedIp[];
 }
 
+export interface MatchOptions {
+  /** Modo "sem porta" (nmap): pergunta se o host está em escopo para ALGUMA porta. */
+  ignorePorts?: boolean;
+}
+
 function portOk(entry: ScopeEntry, port: number | undefined): boolean {
   if (!entry.ports || entry.ports.length === 0) return true;
   return port !== undefined && entry.ports.includes(port);
@@ -52,8 +57,12 @@ function urlPrefixMatches(entry: ScopeEntry, dest: Destination): boolean {
 /**
  * Entrada de escopo (inScope): para CIDR, TODOS os IPs resolvidos precisam estar dentro.
  */
-export function matchesInScope(entry: ScopeEntry, target: Target): boolean {
-  if (!portOk(entry, target.dest.port)) return false;
+export function matchesInScope(
+  entry: ScopeEntry,
+  target: Target,
+  opts: MatchOptions = {},
+): boolean {
+  if (!opts.ignorePorts && !portOk(entry, target.dest.port)) return false;
   switch (entry.kind) {
     case 'host':
     case 'wildcard':
@@ -75,8 +84,9 @@ export function matchesOutOfScope(
   entry: ScopeEntry,
   target: Target,
   cnames: readonly string[],
+  opts: MatchOptions = {},
 ): boolean {
-  if (!portOk(entry, target.dest.port)) return false;
+  if (!opts.ignorePorts && !portOk(entry, target.dest.port)) return false;
   switch (entry.kind) {
     case 'host':
     case 'wildcard':

@@ -122,15 +122,24 @@ export class ScopeResolver {
     const { program } = ctx;
     const { rules } = program;
 
-    // a. Fora de escopo sempre vence.
-    const excluded = program.outOfScope.find((e) => matchesOutOfScope(e, target, base.cnames));
-    if (excluded) {
+    // a. Fora de escopo sempre vence. No modo sem porta (nmap), uma exclusão com portas retira só
+    // essas portas do scan; uma exclusão sem portas retira o host inteiro.
+    const portless = options.portless === true;
+    const excludedPorts = new Set<number>();
+    for (const e of program.outOfScope) {
+      if (!matchesOutOfScope(e, target, base.cnames, { ignorePorts: portless })) continue;
+      if (portless && e.ports && e.ports.length > 0) {
+        for (const p of e.ports) excludedPorts.add(p);
+        continue;
+      }
       return block(
         base,
-        `fora de escopo do programa "${program.name}" (outOfScope: ${excluded.value})`,
-        excluded,
+        `fora de escopo do programa "${program.name}" (outOfScope: ${e.value})`,
+        e,
       );
     }
+    const extra =
+      excludedPorts.size > 0 ? { excludedPorts: [...excludedPorts].sort((a, b) => a - b) } : {};
 
     // b. Automação proibida: só recon passivo.
     if (rules.automation === 'forbidden' && !options.passive) {
@@ -160,7 +169,7 @@ export class ScopeResolver {
     }
 
     // e. Liberar só se bater em inScope.
-    const rule = program.inScope.find((e) => matchesInScope(e, target));
+    const rule = program.inScope.find((e) => matchesInScope(e, target, { ignorePorts: portless }));
     if (!rule) return block(base, `${base.host} não está listado em inScope (default: block)`);
 
     // f. Taxa e confirmação.
@@ -171,6 +180,7 @@ export class ScopeResolver {
         rule,
         requiresConfirmation: true,
         maxRequestsPerSecond: Math.min(rules.maxRequestsPerSecond, UNSPECIFIED_MAX_RPS),
+        ...extra,
         ...base,
       };
     }
@@ -179,6 +189,7 @@ export class ScopeResolver {
       reason: `em escopo (${rule.value})`,
       rule,
       maxRequestsPerSecond: rules.maxRequestsPerSecond,
+      ...extra,
       ...base,
     };
   }

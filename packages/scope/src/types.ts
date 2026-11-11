@@ -33,9 +33,16 @@ export interface ScopeDecision {
   requiresConfirmation?: boolean;
   /** Teto de taxa imposto pelo escopo (programas). */
   maxRequestsPerSecond?: number;
+  /** Modo portless: portas que `outOfScope` exclui para este host. */
+  excludedPorts?: number[];
 }
 
 export interface ScopeOptions {
   /** Recon passivo é o único tipo permitido quando automation = forbidden. */
   passive?: boolean;
+  /**
+   * Destino é só o host (port scan): decide se o host está em escopo para alguma porta e devolve
+   * as portas permitidas (`rule.ports`) e as excluídas (`excludedPorts`). Usado só pelo nmap.
+   */
+  portless?: boolean;
 }

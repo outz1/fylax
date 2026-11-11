@@ -133,10 +133,91 @@ export interface ScopedHttpClient {
   request(req: ScopedRequest): Promise<ScopedResponse>;
 }
 
+/**
+ * Portas de banco, cache, busca e administração remota. Dono único desta lista: o port scan
+ * (packages/http) garante que o perfil standard as inclua, e `recon.exposed-service` as usa para
+ * classificar. Redis, MongoDB e Memcached ficam muito abaixo do top-1000 do nmap (posições 2935,
+ * 3071 e 6388), então não dá para confiar em `--top-ports` para encontrá-los.
+ */
+export const SENSITIVE_PORTS: Readonly<Record<number, string>> = {
+  23: 'administração remota',
+  1433: 'banco de dados',
+  1521: 'banco de dados',
+  2375: 'administração de containers',
+  3306: 'banco de dados',
+  3389: 'administração remota (RDP)',
+  5432: 'banco de dados',
+  5900: 'administração remota',
+  5984: 'banco de dados',
+  6379: 'banco de dados',
+  9042: 'banco de dados',
+  9200: 'índice de busca',
+  11211: 'cache',
+  27017: 'banco de dados',
+};
+
+export const NMAP_PROFILES = ['standard', 'deep'] as const;
+export type NmapProfile = (typeof NMAP_PROFILES)[number];
+
+export interface NmapRequest {
+  /** Nome ou IP. O nmap nunca recebe o nome: só os IPs que o Scope Guard validou. */
+  host: string;
+  /** Opcional e só reduz: nunca amplia as portas do perfil nem as do escopo. */
+  ports?: number[];
+  profile: NmapProfile;
+}
+
+export interface TlsInfo {
+  subject: string;
+  issuer: string;
+  san: string[];
+  notBefore: string;
+  notAfter: string;
+}
+
+export interface NmapServiceInfo {
+  name?: string;
+  product?: string;
+  version?: string;
+  extraInfo?: string;
+  cpe: string[];
+  /** Saída do script `banner`, truncada. */
+  banner?: string;
+  /** "ssl" quando o serviço fala TLS (https, imaps, etc.). */
+  tunnel?: 'ssl';
+}
+
+export interface NmapPort {
+  port: number;
+  protocol: 'tcp';
+  state: 'open';
+  reason: string;
+  service?: NmapServiceInfo;
+  tls?: TlsInfo;
+}
+
+export interface NmapHost {
+  ip: string;
+  ports: NmapPort[];
+}
+
+export interface NmapResult {
+  hosts: NmapHost[];
+  durationMs: number;
+}
+
+/** Única forma de executar o nmap no projeto. Implementação em packages/http. */
+export interface ScopedNmap {
+  scan(req: NmapRequest, opts?: { signal?: AbortSignal }): Promise<NmapResult>;
+}
+
 export interface CheckContext {
   scanId: string;
   target: TargetRef;
+  profile: ScanProfile;
   http: ScopedHttpClient;
+  /** Port scan e detecção de serviço. Recusa execução em perfil passivo. */
+  nmap: ScopedNmap;
   /** Assets conhecidos até agora (inclui os emitidos por checks anteriores). */
   assets: Asset[];
   /** Persiste (sem duplicar) e disponibiliza o asset para os checks seguintes. */
@@ -154,12 +235,23 @@ export interface Check {
   references: string[];
   /** true: só recon passivo (roda no perfil passive e nunca faz request ativo). Padrão: ativo. */
   passive?: boolean;
+  /** Tempo máximo deste check (ms). Sem valor, vale o padrão do runner (60 s). O port scan pede mais. */
+  timeoutMs?: number;
   appliesTo(asset: Asset): boolean;
   run(ctx: CheckContext): Promise<Finding[]>;
 }
 
-/** Filas por modo: lab (worker no namespace do vpn) e bounty (worker sem a VPN de lab, fase 6). */
-export const SCAN_QUEUES = { lab: 'scans-lab', bounty: 'scans-bounty' } as const;
+/**
+ * Uma fila por ambiente de rede, para que um scan nunca caia num worker que alcança outra rede:
+ * - lab: HTB e THM, worker no namespace do vpn (kill switch);
+ * - local: lab local de fixtures (10.250.0.0/24), worker com firewall próprio;
+ * - bounty: worker sem a VPN de lab (fase 6).
+ */
+export const SCAN_QUEUES = {
+  lab: 'scans-lab',
+  local: 'scans-local',
+  bounty: 'scans-bounty',
+} as const;
 export type ScanQueueName = (typeof SCAN_QUEUES)[keyof typeof SCAN_QUEUES];
 
 export interface ScanJob {
@@ -167,7 +259,9 @@ export interface ScanJob {
 }
 
 export function queueForPlatform(platform: TargetPlatform): ScanQueueName {
-  return platform === 'bounty' ? SCAN_QUEUES.bounty : SCAN_QUEUES.lab;
+  if (platform === 'bounty') return SCAN_QUEUES.bounty;
+  if (platform === 'local') return SCAN_QUEUES.local;
+  return SCAN_QUEUES.lab;
 }
 
 export interface ScanSummary {
