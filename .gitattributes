@@ -1,4 +1,6 @@
-* text=auto
-# Scripts executados dentro de containers Linux precisam de LF.
+# Fim de linha LF em todo o repositório, independente do core.autocrlf do Windows.
+# O Prettier, os containers Linux e o Prisma (checksum das migrações) esperam LF.
+* text=auto eol=lf
 *.sh text eol=lf
 Dockerfile text eol=lf
+*.sql text eol=lf

@@ -10,17 +10,17 @@ Um check identifica a falha, coleta a evidência mínima de reprodução e para.
 | --- | --- | --- |
 | 0 | Fundação: monorepo, banco, tipos do núcleo, CLI que cria um scan | concluída |
 | 1 | Escopo e rede: Scope Guard, `ScopedHttpClient`, VPN com kill switch | concluída |
-| 2a | Orquestração: worker, fila, ciclo de vida, runner de checks, confirmação humana | implementada, em revisão |
-| 2b | Recon com nmap travado | próxima |
+| 2a | Orquestração: worker, fila, ciclo de vida, runner de checks, confirmação humana | em revisão (PR) |
+| 2b | Recon com nmap travado e lab local de fixtures | implementada, em revisão |
 | 3 a 7 | Web, API, MCP, relatório e bounty, harness | não iniciadas |
 | GUI | Interface Next.js (versão mínima logo após a 2b) | spec a escrever |
 
-O que existe hoje: criar, enfileirar, confirmar, cancelar e consultar scans (CLI e REST), um worker que executa o scan dentro do namespace de rede do `vpn`, cadastro de programas, decisão de escopo (`scope-check`) e o cliente HTTP que só fala com o que o Scope Guard permite. **Ainda não há checks de vulnerabilidade**: o registro de checks está vazio até a 2b, então um scan termina `done` sem tasks.
+O que existe hoje: criar, enfileirar, confirmar, cancelar e consultar scans (CLI e REST), workers que executam o scan atrás de um firewall, cadastro de programas, decisão de escopo (`scope-check`), o cliente HTTP que só fala com o que o Scope Guard permite e o **módulo de recon**: port scan e detecção de serviço com nmap travado, sondagem HTTP, leitura de certificado TLS e findings informativos (versão exposta, HTTP sem HTTPS, certificado vencido ou que não cobre o host, banco ou cache acessível). **Ainda não há checks de vulnerabilidade web, de API nem de MCP.**
 
 ## Princípios
 
 1. **Só detectar e comprovar, nunca armar.**
-2. **Nada roda fora do escopo.** Todo tráfego passa pelo Scope Guard e pelo `ScopedHttpClient`, a única API de rede do projeto. Há um teste automático e uma regra de lint contra `fetch`, `axios`, `http` e `net` fora de `packages/http`.
+2. **Nada roda fora do escopo.** Todo tráfego passa pelo Scope Guard e pelo `ScopedHttpClient`, a única API de rede do projeto, e o nmap só roda pelo `ScopedNmap` (argv de lista fechada, só IPs validados, auditado). Há um teste automático e uma regra de lint contra `fetch`, `axios`, `http`, `net` e execução do nmap fora de `packages/http`.
 3. **Nada destrutivo.** Sem DoS, brute force ou teste de carga.
 4. **Autorização é humana.** O agente nunca decide que um alvo é autorizado: isso vem de um lab na allowlist ou de um programa cadastrado e revisado.
 5. **Em dúvida, pare e pergunte.**
@@ -70,7 +70,13 @@ pnpm scan -- scope-check https://api.exemplo.com --program exemplo
 pnpm scan -- scope-check 10.129.0.10 --lab-cidr 10.129.0.0/16
 pnpm scan -- scope-check 10.129.0.10 --ovpn infra/vpn/lab.ovpn
 
-# scans reais rodam no worker do compose, dentro do namespace do vpn (kill switch)
+# lab local de fixtures (10.250.0.0/24, rede interna): alvos de teste conhecidos, sem tocar em nada real
+pnpm lab:up
+pnpm scan -- create --target 10.250.0.13 --kind host --platform local
+pnpm scan -- run <scanId>      # scans do lab local vão para a fila scans-local (worker-local)
+pnpm lab:down                  # derruba só o lab, nunca o Postgres
+
+# scans de HTB e THM rodam no worker do compose, dentro do namespace do vpn (kill switch)
 docker compose --profile worker up -d --build
 
 # desenvolvimento: API em http://127.0.0.1:3001 (só localhost, sem autenticação) e worker na máquina
@@ -87,7 +93,7 @@ Tudo vem do `.env` (veja `.env.example`). As variáveis que importam para o esco
 
 | Variável | Para que serve |
 | --- | --- |
-| `LAB_CIDRS` | Redes do lab (ex.: `10.129.0.0/16` no HTB, `10.250.0.0/24` no lab local). Somadas às linhas `route` do `.ovpn`. Sem nenhuma, o worker recusa o scan. |
+| `LAB_CIDRS` | Redes das VPNs de lab (ex.: `10.129.0.0/16` no HTB). Somadas às linhas `route` do `.ovpn`. Sem nenhuma, o worker da VPN recusa o scan. O lab local tem a própria rede (`10.250.0.0/24`) fixa no compose. |
 | `FYLAX_LAN_CIDRS` | Faixas extras da sua LAN, bloqueio absoluto. Já cobertos por padrão: `192.168.0.0/16` e `172.16.0.0/12`. |
 
 Segredos (`.env`, `*.ovpn`, `programs/*.local.yaml`) nunca entram no git.
@@ -96,13 +102,15 @@ Segredos (`.env`, `*.ovpn`, `programs/*.local.yaml`) nunca entram no git.
 
 ```
 apps/api            API NestJS, Prisma, CLI (create, run, confirm, cancel, scope-check)
-apps/worker         worker BullMQ: executa scans, roda os checks por módulo (imagem em apps/worker/Dockerfile)
+apps/worker         worker BullMQ: executa scans, roda os checks por módulo (imagem em apps/worker/Dockerfile, com nmap)
 packages/core       tipos e contratos do núcleo
 packages/scope      Scope Guard: resolver de escopo, contexto de scan, auditoria, validação
-packages/http       ScopedHttpClient: única API de rede do projeto
+packages/http       ScopedHttpClient e ScopedNmap: únicas formas de falar com a rede
+packages/checks     checks de vulnerabilidade, por módulo (hoje: recon)
 packages/queue      filas BullMQ (enfileiramento compartilhado por API e CLI)
 packages/db         sinks de audit e de asset no Postgres, carga do .env
 infra/              docker compose (postgres, redis, vpn) e container vpn com kill switch
+infra/lab           fixtures do lab local (web, tls, ssh, redis) em 10.250.0.0/24
 docs/               contrato do agente e especificações das fases
 biblioteca/         decisões, método e catálogo de dados do projeto
 ESTADO.md           onde estamos, próxima ação e pendências
@@ -111,7 +119,7 @@ ESTADO.md           onde estamos, próxima ação e pendências
 ## Desenvolvimento
 
 - Stack: monorepo pnpm, TypeScript estrito, NestJS, Prisma, PostgreSQL, Redis, Vitest.
-- `pnpm verify` é a porta de qualidade (lint, typecheck e testes). O teste do kill switch usa Docker e é pulado se o Docker não estiver disponível.
+- `pnpm verify` é a porta de qualidade (lint, typecheck e testes). Os testes de kill switch usam Docker e são pulados sem ele; o teste de integração com nmap real (`lab.integration.test.ts`) só roda com o lab de pé (`pnpm lab:up` antes).
 - Commits seguem Conventional Commits, com uma fase por branch e um PR por fase.
 - Todo check e todo guard de escopo têm teste.
 - Mudanças em `packages/scope`, `packages/http` e `infra/vpn` exigem revisão humana.

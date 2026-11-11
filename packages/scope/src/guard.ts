@@ -7,6 +7,7 @@ import type { ScopeContext, ScopeDecision } from './types';
 export interface GuardOptions {
   scanId?: string | null;
   passive?: boolean;
+  portless?: boolean;
 }
 
 /**
@@ -26,6 +27,7 @@ export class ScopeGuard {
   ): Promise<ScopeDecision> {
     const decision = await this.resolver.resolve(destination, ctx, {
       ...(options.passive !== undefined ? { passive: options.passive } : {}),
+      ...(options.portless ? { portless: true } : {}),
     });
 
     await this.audit.record({
@@ -44,6 +46,8 @@ export class ScopeGuard {
         mode: ctx.mode,
         program: ctx.mode === 'program' ? ctx.program.name : null,
         passive: options.passive ?? false,
+        portless: options.portless ?? false,
+        excludedPorts: decision.excludedPorts ?? null,
         requiresConfirmation: decision.requiresConfirmation ?? false,
         maxRequestsPerSecond: decision.maxRequestsPerSecond ?? null,
       },

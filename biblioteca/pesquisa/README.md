@@ -24,4 +24,5 @@ R1 (AAAA-MM-DD): hipótese ... | por que caiu: ... | evidência: evidencias/...
 - [FASE-0](FASE-0.md): decisões de implementação da fundação (stack, validação, convenções de checkId e rede).
 - [FASE-1](FASE-1.md): decisões do Scope Guard, do ScopedHttpClient e do kill switch (bloqueios, escopo, redirects, firewall).
 - [FASE-2A](FASE-2A.md): decisões da orquestração (filas, confirmação, cancelamento, worker no namespace do vpn).
+- [FASE-2B](FASE-2B.md): decisões do recon com nmap travado, lab local e os desvios da proposta achados no teste real.
 - [PROPOSTA-SPEC-FASE-2](PROPOSTA-SPEC-FASE-2.md): spec da fase 2 aprovada por Edu (2a feita, 2b próxima).

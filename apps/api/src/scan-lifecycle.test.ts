@@ -75,6 +75,15 @@ describe('run', () => {
     expect(enqueuer.enqueued.at(-1)).toEqual({ scanId: id, queue: 'scans-lab' });
   });
 
+  it('scan do lab local entra na fila scans-local, não na da VPN', async () => {
+    const id = await novoScan({ platform: 'local' });
+    expect(await service.runScan(id)).toEqual({
+      scanId: id,
+      state: 'enqueued',
+      queue: 'scans-local',
+    });
+  });
+
   it('só scans queued podem rodar', async () => {
     const id = await novoScan();
     await prisma.scan.update({ where: { id }, data: { status: 'done' } });

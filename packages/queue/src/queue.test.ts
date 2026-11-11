@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it } from 'vitest';
 import { SCAN_QUEUES } from '@fylax/core';
+import type { JobType } from 'bullmq';
 import { BullScanEnqueuer, Queue, redisConnection } from './index';
 
 describe('redisConnection', () => {
@@ -21,19 +22,29 @@ describe('redisConnection', () => {
   });
 });
 
+const ALL_STATES: JobType[] = [
+  'waiting',
+  'active',
+  'delayed',
+  'completed',
+  'failed',
+  'prioritized',
+];
+
 describe('BullScanEnqueuer (Redis real)', () => {
   const url = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
   const enqueuer = new BullScanEnqueuer(redisConnection(url));
   const ids: string[] = [];
 
   afterAll(async () => {
-    const lab = new Queue(SCAN_QUEUES.lab, { connection: redisConnection(url) });
-    const bounty = new Queue(SCAN_QUEUES.bounty, { connection: redisConnection(url) });
+    // As três filas: com um worker consumindo, o job de teste pode ter sido concluído e retido.
+    const filas = [SCAN_QUEUES.lab, SCAN_QUEUES.local, SCAN_QUEUES.bounty].map(
+      (nome) => new Queue(nome, { connection: redisConnection(url) }),
+    );
     for (const id of ids) {
-      await (await lab.getJob(id))?.remove().catch(() => undefined);
-      await (await bounty.getJob(id))?.remove().catch(() => undefined);
+      for (const fila of filas) await (await fila.getJob(id))?.remove().catch(() => undefined);
     }
-    await Promise.all([lab.close(), bounty.close(), enqueuer.close()]);
+    await Promise.all([...filas.map((f) => f.close()), enqueuer.close()]);
   });
 
   it('roteia por plataforma e é idempotente pelo scanId', async () => {
@@ -46,10 +57,25 @@ describe('BullScanEnqueuer (Redis real)', () => {
     expect(await enqueuer.enqueue(bounty, 'bounty')).toBe('scans-bounty');
 
     const q = new Queue(SCAN_QUEUES.lab, { connection: redisConnection(url) });
-    const jobs = (await q.getWaiting()).filter((j) => j.id === lab);
+    // Qualquer estado: com um worker consumindo a fila, o job pode já ter sido pego.
+    const jobs = (await q.getJobs(ALL_STATES)).filter((j) => j.id === lab);
     await q.close();
     expect(jobs).toHaveLength(1);
     expect(jobs[0]?.data).toEqual({ scanId: lab });
+  });
+
+  it('lab local vai para scans-local, separado de scans-lab (HTB e THM)', async () => {
+    const local = randomUUID();
+    ids.push(local);
+    expect(await enqueuer.enqueue(local, 'local')).toBe('scans-local');
+
+    const qLocal = new Queue(SCAN_QUEUES.local, { connection: redisConnection(url) });
+    const qLab = new Queue(SCAN_QUEUES.lab, { connection: redisConnection(url) });
+    // Com o lab de pé o worker-local já consome scans-local: olha o job em qualquer estado.
+    expect((await qLocal.getJobs(ALL_STATES)).some((j) => j.id === local)).toBe(true);
+    expect((await qLab.getJobs(ALL_STATES)).some((j) => j.id === local)).toBe(false);
+    await (await qLocal.getJob(local))?.remove().catch(() => undefined);
+    await Promise.all([qLocal.close(), qLab.close()]);
   });
 
   it('remove um job que ainda está na fila', async () => {

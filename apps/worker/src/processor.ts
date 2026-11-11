@@ -11,6 +11,7 @@ import {
   type ScanProfile,
   type ScanQueueName,
   type ScopedHttpClient,
+  type ScopedNmap,
   type TargetRef,
 } from '@fylax/core';
 import { assetDedupKey } from '@fylax/db';
@@ -39,6 +40,8 @@ export interface ProcessorDeps {
   readOvpn: (path: string) => string | undefined;
   /** Cliente HTTP do scan, já com Scope Guard, rate limit e auditoria. */
   makeHttp: (args: HttpFactoryArgs) => ScopedHttpClient;
+  /** nmap do scan: única forma de executá-lo, sob o Scope Guard e com auditoria tool.exec. */
+  makeNmap: (args: HttpFactoryArgs) => ScopedNmap;
   assetSinkFor: (scanId: string) => AssetSink;
   checkTimeoutMs?: number;
   cancelPollMs?: number;
@@ -67,6 +70,13 @@ function seedAssets(target: TargetRef): Asset[] {
     ? [{ type: 'service', data: { ...base, host: target.value } }]
     : [{ type: 'url', data: { ...base, url: target.value } }];
 }
+
+/** O nmap nunca roda em check passivo nem em scan passivo: a tentativa vira erro do check. */
+const refuseNmap: ScopedNmap = {
+  scan: async () => {
+    throw new Error('nmap não roda em perfil ou check passivo');
+  },
+};
 
 /** Força `passive: true` em todo request (checks passivos e escopos que proíbem automação). */
 function passiveOnly(client: ScopedHttpClient): ScopedHttpClient {
@@ -184,6 +194,7 @@ export class ScanProcessor {
     for (const module of byModule.keys()) await this.prepareTask(scanId, module);
 
     const http = this.d.makeHttp({ scanId, profile, context });
+    const nmap = this.d.makeNmap({ scanId, profile, context });
     const assetSink = this.d.assetSinkFor(scanId);
 
     const known: Asset[] = seedAssets(target);
@@ -225,10 +236,13 @@ export class ScanProcessor {
           if (!known.some((a) => check.appliesTo(a))) continue;
           ran++;
 
+          const passive = check.passive === true || onlyPassive;
           const ctx: CheckContext = {
             scanId,
             target,
-            http: check.passive || onlyPassive ? passiveOnly(http) : http,
+            profile,
+            http: passive ? passiveOnly(http) : http,
+            nmap: passive ? refuseNmap : nmap,
             assets: known,
             emitAsset,
           };
@@ -289,21 +303,62 @@ export class ScanProcessor {
     }
   }
 
-  /** Timeout por check e cancelamento: o runner segue mesmo que o check ignore o `signal`. */
-  private runCheck(check: Check, ctx: CheckContext, cancel: AbortSignal): Promise<Finding[]> {
-    const timeoutMs = this.d.checkTimeoutMs ?? 60_000;
-    const timeout = AbortSignal.timeout(timeoutMs);
-    const signal = AbortSignal.any([cancel, timeout]);
+  /**
+   * Timeout por check e cancelamento: o runner segue mesmo que o check ignore o `signal`.
+   *
+   * O check recebe um contexto com "portão": http, nmap e emitAsset recusam qualquer chamada NOVA
+   * depois que o check foi cancelado, estourou o timeout ou terminou. Um check que ignora o signal
+   * (ou deixa um timer rodando) continua a existir em segundo plano, mas não consegue mais gerar
+   * tráfego nem gravar asset. Só o que já estava em andamento termina por conta própria.
+   */
+  private async runCheck(check: Check, ctx: CheckContext, cancel: AbortSignal): Promise<Finding[]> {
+    const timeoutMs = check.timeoutMs ?? this.d.checkTimeoutMs ?? 60_000;
+    const done = new AbortController(); // aborta quando o check termina, por qualquer motivo
+    const signal = AbortSignal.any([cancel, AbortSignal.timeout(timeoutMs), done.signal]);
 
     const aborted = new Promise<never>((_, reject) => {
-      const onAbort = () =>
+      const onAbort = () => {
+        if (done.signal.aborted) return; // o check já terminou: nada a rejeitar
         reject(cancel.aborted ? new CanceledError() : new Error(`timeout de ${timeoutMs} ms`));
+      };
       if (signal.aborted) onAbort();
       else signal.addEventListener('abort', onAbort, { once: true });
     });
-    const running = check.run({ ...ctx, signal });
+    aborted.catch(() => undefined);
+
+    const live = (what: string): void => {
+      if (signal.aborted) {
+        throw new Error(`${what} recusado: o check foi cancelado, expirou ou já terminou`);
+      }
+    };
+    const gated: CheckContext = {
+      ...ctx,
+      signal,
+      http: {
+        request: async (req) => {
+          live('request HTTP');
+          return ctx.http.request(req);
+        },
+      },
+      nmap: {
+        scan: async (req, opts = {}) => {
+          live('nmap');
+          return ctx.nmap.scan(req, { ...opts, signal: opts.signal ?? signal });
+        },
+      },
+      emitAsset: async (asset) => {
+        live('emitAsset');
+        return ctx.emitAsset(asset);
+      },
+    };
+
+    const running = check.run(gated);
     running.catch(() => undefined); // evita rejeição não tratada se o timeout vencer a corrida
-    return Promise.race([running, aborted]);
+    try {
+      return await Promise.race([running, aborted]);
+    } finally {
+      done.abort();
+    }
   }
 
   /** Persiste os findings válidos e devolve os erros dos inválidos. Idempotente por dedupKey. */

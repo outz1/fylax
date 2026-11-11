@@ -292,6 +292,83 @@ describe('bordas do ScopeResolver', () => {
     expect((await r.resolve('https://multi.exemplo.com', excl)).allowed).toBe(false);
   });
 
+  it('modo portless (nmap): host com portas no escopo é permitido e devolve as portas via rule', async () => {
+    const r = resolverWith({ 'api.exemplo.com': pub });
+    const ctx = programCtx({
+      inScope: [{ kind: 'host', value: 'api.exemplo.com', ports: [443, 8443] }],
+    });
+    // sem portless, destino sem esquema nem porta não prova a porta: block
+    expect((await r.resolve('api.exemplo.com', ctx)).allowed).toBe(false);
+    // com portless, o host está em escopo e a regra carrega as portas permitidas
+    const d = await r.resolve('api.exemplo.com', ctx, { portless: true });
+    expect(d.allowed).toBe(true);
+    expect(d.rule).toEqual({ kind: 'host', value: 'api.exemplo.com', ports: [443, 8443] });
+  });
+
+  it('modo portless: outOfScope com portas retira só essas portas; sem portas retira o host', async () => {
+    const r = resolverWith({ 'api.exemplo.com': pub });
+    const base = { inScope: [{ kind: 'wildcard', value: '*.exemplo.com' } as const] };
+
+    const parcial = await r.resolve(
+      'api.exemplo.com',
+      programCtx({
+        ...base,
+        outOfScope: [{ kind: 'host', value: 'api.exemplo.com', ports: [22, 3306, 22] }],
+      }),
+      { portless: true },
+    );
+    expect(parcial.allowed).toBe(true);
+    expect(parcial.excludedPorts).toEqual([22, 3306]);
+
+    const total = await r.resolve(
+      'api.exemplo.com',
+      programCtx({ ...base, outOfScope: [{ kind: 'host', value: 'api.exemplo.com' }] }),
+      { portless: true },
+    );
+    expect(total.allowed).toBe(false);
+    expect(total.reason).toMatch(/outOfScope/);
+  });
+
+  it('modo portless continua exigindo escopo, brief válido e respeitando forbidden', async () => {
+    const r = resolverWith({ 'api.exemplo.com': pub, 'x.outro.org': pub });
+    const ctx = programCtx({});
+    expect((await r.resolve('x.outro.org', ctx, { portless: true })).allowed).toBe(false);
+    expect(
+      (
+        await r.resolve('api.exemplo.com', programCtx({ rules: { automation: 'forbidden' } }), {
+          portless: true,
+        })
+      ).allowed,
+    ).toBe(false);
+    expect(
+      (
+        await r.resolve('api.exemplo.com', programCtx({ reviewedAt: daysAgo(90) }), {
+          portless: true,
+        })
+      ).allowed,
+    ).toBe(false);
+    // urlPrefix não autoriza port scan (não há como provar o caminho)
+    const url = programCtx({
+      inScope: [{ kind: 'urlPrefix', value: 'https://api.exemplo.com/*' }],
+    });
+    expect((await r.resolve('api.exemplo.com', url, { portless: true })).allowed).toBe(false);
+  });
+
+  it('portless não afeta o modo lab nem o bloqueio absoluto', async () => {
+    const r = resolverWith({});
+    expect((await r.resolve('10.129.0.10', LAB, { portless: true })).allowed).toBe(true);
+    expect((await r.resolve('127.0.0.1', LAB, { portless: true })).allowed).toBe(false);
+    expect(
+      (
+        await r.resolve(
+          '192.168.1.5',
+          { mode: 'lab', allowlist: ['192.168.0.0/16'] },
+          { portless: true },
+        )
+      ).allowed,
+    ).toBe(false);
+  });
+
   it('automation unspecified: allow com taxa baixa e confirmação humana', async () => {
     const r = resolverWith({ 'api.exemplo.com': pub });
     const d = await r.resolve(

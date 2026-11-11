@@ -15,6 +15,11 @@ const PADROES: Array<[string, RegExp]> = [
     'require de módulo de rede',
     /require\(\s*['"](node:)?(net|tls|http|https|http2|dgram)['"]\s*\)/,
   ],
+  // O nmap só roda pelo ScopedNmap (packages/http): lista fechada de argv, IPs validados e auditoria.
+  [
+    'execução do nmap',
+    /\b(spawn|spawnSync|exec|execSync|execFile|execFileSync|fork)\s*\(\s*[`'"]([^`'"]*[\\/])?nmap(\.exe)?\b/,
+  ],
   ['WebSocket', /new\s+WebSocket\s*\(/],
   ['TLS desabilitado', /rejectUnauthorized\s*:\s*false/],
   ['TLS desabilitado (env)', /NODE_TLS_REJECT_UNAUTHORIZED/],

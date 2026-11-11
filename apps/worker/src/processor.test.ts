@@ -5,7 +5,10 @@ import type {
   CheckModule,
   Finding,
   ScanProfile,
+  NmapRequest,
+  NmapResult,
   ScopedHttpClient,
+  ScopedNmap,
   ScopedRequest,
   TargetPlatform,
 } from '@fylax/core';
@@ -23,6 +26,14 @@ class FakeHttp implements ScopedHttpClient {
   async request(req: ScopedRequest) {
     this.requests.push(req);
     return { status: 200, headers: {}, body: '', bytes: 0 };
+  }
+}
+
+class FakeNmap implements ScopedNmap {
+  readonly calls: NmapRequest[] = [];
+  async scan(req: NmapRequest): Promise<NmapResult> {
+    this.calls.push(req);
+    return { hosts: [], durationMs: 1 };
   }
 }
 
@@ -55,6 +66,7 @@ function finding(checkId: string, dedupKey = 'k1'): Finding {
 
 function setup(checks: Check[], over: Partial<ProcessorDeps> = {}) {
   const http = new FakeHttp();
+  const nmap = new FakeNmap();
   const factoryCalls: HttpFactoryArgs[] = [];
   const processor = new ScanProcessor({
     prisma,
@@ -66,11 +78,12 @@ function setup(checks: Check[], over: Partial<ProcessorDeps> = {}) {
       factoryCalls.push(args);
       return http;
     },
+    makeNmap: () => nmap,
     assetSinkFor: (scanId) => new PrismaAssetSink(prisma, scanId),
     cancelPollMs: 20,
     ...over,
   });
-  return { processor, http, factoryCalls };
+  return { processor, http, nmap, factoryCalls };
 }
 
 async function programa(automation: 'allowed' | 'unspecified' | 'forbidden') {
@@ -270,6 +283,36 @@ describe('escopo e confirmação (falha fechada)', () => {
     expect(await prisma.task.count({ where: { scanId: id } })).toBe(0);
   });
 
+  it('lab local roda só na fila scans-local; htb e thm só na scans-lab', async () => {
+    const local = await novoScan({ platform: 'local' });
+    const htb = await novoScan({ platform: 'htb' });
+    let rodou = 0;
+    const checks = [
+      check('recon.x', async () => {
+        rodou++;
+        return [];
+      }),
+    ];
+
+    // worker da VPN (scans-lab) recusa o scan local
+    expect(await setup(checks, { queue: 'scans-lab' }).processor.process(local)).toBe('failed');
+    expect((await prisma.scan.findUniqueOrThrow({ where: { id: local } })).error).toMatch(
+      /plataforma "local" não é atendida pela fila scans-lab/,
+    );
+    expect(rodou).toBe(0);
+
+    // worker local (scans-local) recusa o scan de HTB
+    expect(await setup(checks, { queue: 'scans-local' }).processor.process(htb)).toBe('failed');
+    expect((await prisma.scan.findUniqueOrThrow({ where: { id: htb } })).error).toMatch(
+      /plataforma "htb" não é atendida pela fila scans-local/,
+    );
+
+    // e cada um executa o seu
+    const local2 = await novoScan({ platform: 'local' });
+    expect(await setup(checks, { queue: 'scans-local' }).processor.process(local2)).toBe('done');
+    expect(rodou).toBe(1);
+  });
+
   it('plataforma de outra fila não executa neste worker', async () => {
     const prog = await programa('allowed');
     const id = await novoScan({ platform: 'bounty', kind: 'url', programId: prog.id });
@@ -373,6 +416,62 @@ describe('escopo e confirmação (falha fechada)', () => {
   });
 });
 
+describe('nmap e perfil no contexto do check', () => {
+  it('o check ativo recebe o profile do scan e o nmap; o passivo recebe um nmap que recusa', async () => {
+    let perfil: string | undefined;
+    const ativo = check('recon.ativo', async (ctx) => {
+      perfil = ctx.profile;
+      await ctx.nmap.scan({ host: '10.250.0.10', profile: 'standard' });
+      return [];
+    });
+    const passivo = check(
+      'recon.passivo',
+      async (ctx) => {
+        await ctx.nmap.scan({ host: '10.250.0.10', profile: 'standard' });
+        return [];
+      },
+      { passive: true },
+    );
+
+    const id = await novoScan({ profile: 'deep' });
+    const s = setup([ativo, passivo]);
+    expect(await s.processor.process(id)).toBe('done');
+    expect(perfil).toBe('deep');
+    expect(s.nmap.calls).toHaveLength(1); // só o ativo chegou ao nmap
+    const task = await prisma.task.findFirstOrThrow({ where: { scanId: id } });
+    expect(task.status).toBe('failed');
+    expect(task.error).toContain('recon.passivo: nmap não roda em perfil ou check passivo');
+  });
+
+  it('em perfil passive nenhum check ativo roda, então o nmap nunca é chamado', async () => {
+    const id = await novoScan({ profile: 'passive' });
+    const s = setup([
+      check('recon.ativo', async (ctx) => {
+        await ctx.nmap.scan({ host: 'x', profile: 'standard' });
+        return [];
+      }),
+    ]);
+    expect(await s.processor.process(id)).toBe('done');
+    expect(s.nmap.calls).toHaveLength(0);
+  });
+
+  it('programa com automation forbidden: o nmap é recusado mesmo num check marcado como passivo ou não', async () => {
+    const prog = await programa('forbidden');
+    const id = await novoScan({ platform: 'bounty', kind: 'url', programId: prog.id });
+    const s = setup(
+      [
+        check('recon.ativo', async (ctx) => {
+          await ctx.nmap.scan({ host: 'x', profile: 'standard' });
+          return [];
+        }),
+      ],
+      { queue: 'scans-bounty' },
+    );
+    expect(await s.processor.process(id)).toBe('done');
+    expect(s.nmap.calls).toHaveLength(0); // check ativo nem foi selecionado
+  });
+});
+
 describe('isolamento de erro e timeout', () => {
   it('13. um check que lança vira Task.error; os demais continuam e o scan termina done', async () => {
     const id = await novoScan();
@@ -417,6 +516,114 @@ describe('isolamento de erro e timeout', () => {
     expect((await prisma.task.findFirstOrThrow({ where: { scanId: id } })).error).toMatch(
       /fora do módulo recon/,
     );
+  });
+});
+
+describe('portão do check: nada novo sai depois de cancelado, expirado ou terminado', () => {
+  type Resultado = { http?: string; nmap?: string; asset?: string };
+
+  /** Check mal-comportado: ignora o signal e, depois de `espera` ms, tenta usar a rede e gravar asset. */
+  function mal(id: string, espera: number, r: Resultado): Check {
+    const tenta = async (campo: keyof Resultado, fn: () => Promise<unknown>) => {
+      try {
+        await fn();
+        r[campo] = 'executou';
+      } catch (e) {
+        r[campo] = (e as Error).message;
+      }
+    };
+    return check(id, async (ctx) => {
+      await sleep(espera);
+      await tenta('http', () => ctx.http.request({ method: 'GET', url: 'http://10.250.0.10/' }));
+      await tenta('nmap', () => ctx.nmap.scan({ host: '10.250.0.10', profile: 'standard' }));
+      await tenta('asset', () => ctx.emitAsset({ type: 'port', data: { port: 1 } }));
+      return [];
+    });
+  }
+
+  const recusados = (r: Resultado) => {
+    expect(r.http).toMatch(/recusado/);
+    expect(r.nmap).toMatch(/recusado/);
+    expect(r.asset).toMatch(/recusado/);
+  };
+
+  it('depois do TIMEOUT, o check que ignora o signal não gera request, nmap nem asset', async () => {
+    const id = await novoScan();
+    const r: Resultado = {};
+    const s = setup([mal('recon.zumbi', 150, r)], { checkTimeoutMs: 50 });
+
+    expect(await s.processor.process(id)).toBe('done');
+    expect((await prisma.task.findFirstOrThrow({ where: { scanId: id } })).error).toMatch(
+      /timeout de 50 ms/,
+    );
+
+    await sleep(350); // o zumbi acorda e tenta
+    recusados(r);
+    expect(s.http.requests).toHaveLength(0);
+    expect(s.nmap.calls).toHaveLength(0);
+    expect(await prisma.asset.count({ where: { scanId: id } })).toBe(0);
+  });
+
+  it('depois do CANCELAMENTO, idem', async () => {
+    const id = await novoScan();
+    const r: Resultado = {};
+    const s = setup([mal('recon.zumbi', 250, r)]);
+
+    const rodando = s.processor.process(id);
+    await sleep(80);
+    await prisma.scan.update({
+      where: { id },
+      data: { status: 'canceled', finishedAt: new Date() },
+    });
+    expect(await rodando).toBe('canceled');
+
+    await sleep(400);
+    recusados(r);
+    expect(s.http.requests).toHaveLength(0);
+    expect(s.nmap.calls).toHaveLength(0);
+    expect(await prisma.asset.count({ where: { scanId: id } })).toBe(0);
+  });
+
+  it('depois que o check TERMINA, um timer esquecido por ele não consegue mais usar a rede', async () => {
+    const id = await novoScan();
+    const r: Resultado = {};
+    const s = setup([
+      check('recon.legitimo', async (ctx) => {
+        await ctx.http.request({ method: 'GET', url: 'http://10.250.0.10/' }); // uso normal: funciona
+        // deixa um timer para depois de terminar
+        setTimeout(() => {
+          ctx.http.request({ method: 'GET', url: 'http://10.250.0.10/x' }).then(
+            () => (r.http = 'executou'),
+            (e: Error) => (r.http = e.message),
+          );
+        }, 80);
+        return [];
+      }),
+    ]);
+
+    expect(await s.processor.process(id)).toBe('done');
+    await sleep(250);
+    expect(r.http).toMatch(/recusado/);
+    expect(s.http.requests.map((q) => q.url)).toEqual(['http://10.250.0.10/']); // só a chamada legítima
+  });
+
+  it('o portão não atrapalha o uso normal: http, nmap e emitAsset funcionam durante o check', async () => {
+    const id = await novoScan();
+    const r: Resultado = {};
+    const s = setup([
+      check('recon.normal', async (ctx) => {
+        await ctx.http.request({ method: 'GET', url: 'http://10.250.0.10/' });
+        await ctx.nmap.scan({ host: '10.250.0.10', profile: 'standard' });
+        await ctx.emitAsset({ type: 'port', data: { port: 1 } });
+        r.http = 'ok';
+        return [];
+      }),
+    ]);
+    expect(await s.processor.process(id)).toBe('done');
+    expect(r.http).toBe('ok');
+    expect(s.http.requests).toHaveLength(1);
+    expect(s.nmap.calls).toHaveLength(1);
+    expect(await prisma.asset.count({ where: { scanId: id } })).toBe(1);
   });
 });
 
