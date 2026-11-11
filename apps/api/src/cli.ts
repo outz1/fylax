@@ -3,24 +3,19 @@ import { PrismaClient } from '@prisma/client';
 import { DomainError, ValidationFailedError } from './errors';
 import { loadEnv } from './env';
 import { ScansService } from './scans.service';
+import { scopeCheck } from './scope-check';
 
 const USO = `uso:
   pnpm scan -- create --target <valor> --kind <host|url|openapi|mcp> --platform <htb|thm|local|bounty>
-                      [--profile <passive|standard|deep|bounty>] [--program-id <uuid>]`;
+                      [--profile <passive|standard|deep|bounty>] [--program-id <uuid>]
+  pnpm scan -- scope-check <url|host|ip> --program <nome> [--passive]
+  pnpm scan -- scope-check <url|host|ip> (--ovpn <arquivo> | --lab-cidr <cidr>...) [--passive]`;
 
-async function main(argv: string[]): Promise<number> {
-  // pnpm repassa o "--" literal; descarta os iniciais.
-  const args = [...argv];
-  while (args[0] === '--') args.shift();
-  const [comando, ...resto] = args;
+type Cmd = (args: string[], prisma: PrismaClient) => Promise<number>;
 
-  if (comando !== 'create') {
-    console.error(comando ? `comando desconhecido: ${comando}\n${USO}` : USO);
-    return 2;
-  }
-
+const create: Cmd = async (args, prisma) => {
   const { values } = parseArgs({
-    args: resto,
+    args,
     options: {
       target: { type: 'string' },
       kind: { type: 'string' },
@@ -29,19 +24,63 @@ async function main(argv: string[]): Promise<number> {
       'program-id': { type: 'string' },
     },
   });
+  const { scanId } = await new ScansService(prisma).createScan({
+    targetKind: values.kind,
+    targetValue: values.target,
+    platform: values.platform,
+    profile: values.profile,
+    programId: values['program-id'],
+  });
+  console.log(scanId);
+  return 0;
+};
+
+const scopeCheckCmd: Cmd = async (args, prisma) => {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      program: { type: 'string' },
+      ovpn: { type: 'string' },
+      'lab-cidr': { type: 'string', multiple: true },
+      passive: { type: 'boolean' },
+    },
+  });
+  const [destination, ...extra] = positionals;
+  if (!destination || extra.length > 0) {
+    console.error(`informe exatamente um destino\n${USO}`);
+    return 2;
+  }
+  const { decision, text } = await scopeCheck(prisma, {
+    destination,
+    ...(values.program ? { program: values.program } : {}),
+    ...(values.ovpn ? { ovpn: values.ovpn } : {}),
+    ...(values['lab-cidr'] ? { labCidrs: values['lab-cidr'] } : {}),
+    ...(values.passive ? { passive: true } : {}),
+  });
+  console.log(text);
+  // 0 = permitido, 1 = bloqueado (útil em scripts)
+  return decision.allowed ? 0 : 1;
+};
+
+const COMANDOS: Record<string, Cmd> = { create, 'scope-check': scopeCheckCmd };
+
+async function main(argv: string[]): Promise<number> {
+  // pnpm repassa o "--" literal; descarta os iniciais.
+  const args = [...argv];
+  while (args[0] === '--') args.shift();
+  const [nome, ...resto] = args;
+  const comando = nome ? COMANDOS[nome] : undefined;
+
+  if (!comando) {
+    console.error(nome ? `comando desconhecido: ${nome}\n${USO}` : USO);
+    return 2;
+  }
 
   loadEnv();
   const prisma = new PrismaClient();
   try {
-    const { scanId } = await new ScansService(prisma).createScan({
-      targetKind: values.kind,
-      targetValue: values.target,
-      platform: values.platform,
-      profile: values.profile,
-      programId: values['program-id'],
-    });
-    console.log(scanId);
-    return 0;
+    return await comando(resto, prisma);
   } catch (e) {
     if (e instanceof ValidationFailedError) {
       console.error('erro de validação:');
