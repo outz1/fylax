@@ -5,7 +5,7 @@
 ## Você está aqui
 
 - Fase 0: **concluída e mergeada** no `main` (PR #1).
-- Fase 1: **concluída e mergeada** no `main` (PR #2). Fase 2: **bloqueada aguardando spec**; proposta em `biblioteca/pesquisa/PROPOSTA-SPEC-FASE-2.md`.
+- Fase 1: **concluída e mergeada** no `main` (PR #2). Fase 2: **bloqueada aguardando spec** (D1 decidida: nmap travado; D2 a D7 abertas); proposta em `biblioteca/pesquisa/PROPOSTA-SPEC-FASE-2.md`.
 - Últimos números: `pnpm verify` limpo, 92 testes (scope 35, http 26 incluindo 3 de kill switch com Docker, api 31). Critérios de aceite da fase 1 conferidos (ver abaixo).
 - Ambiente: Docker Desktop 29.9 em `F:\Docker`, Node 24, pnpm 10.26. `docker compose up -d` sobe postgres, redis e vpn (vpn fica fechado e não saudável sem `infra/vpn/lab.ovpn`). Banco migrado (`init`) e vazio.
 
@@ -18,7 +18,7 @@
 
 ## Próxima ação
 
-1. Edu revisa `biblioteca/pesquisa/PROPOSTA-SPEC-FASE-2.md`, responde as decisões D1 a D7 e, se aprovar, move o arquivo para `docs/SPEC-FASE-2.md`. Só então a fase 2 começa.
+1. Edu revisa `biblioteca/pesquisa/PROPOSTA-SPEC-FASE-2.md`, responde as decisões D2 a D7 e, se aprovar, move o arquivo para `docs/SPEC-FASE-2.md`. Só então a fase 2 começa.
 2. Edu fornece o `.ovpn` do lab (`infra/vpn/lab.ovpn`) e `LAB_CIDRS` no `.env` para testar o OpenVPN real: é o único trecho da fase 1 não coberto por teste.
 
 ## Pendências
@@ -37,7 +37,7 @@
 ## Linha do tempo
 
 <!-- uma linha por sessão, mais recente no topo: AAAA-MM-DD | o que mudou | commit -->
-2026-11-11 | proposta de SPEC-FASE-2 (aguarda aprovação) | ver `git log docs/proposta-spec-fase-2`
+2026-11-11 | proposta de SPEC-FASE-2 revisão 2: nmap travado (D1), roteiro até o lab e GUI (aguarda aprovação) | ver `git log docs/proposta-spec-fase-2`
 2026-11-11 | README.md do repositório | ver `git log feat/fase-1`
 2026-11-11 | fase 1: Scope Guard, ScopedHttpClient, kill switch (vpn), scope-check, 10 testes de regressão | ver `git log feat/fase-1`
 2026-11-11 | fase 0: monorepo, schema Prisma, API Nest, CLI `scan create`, 25 testes, compose | 74fdd50
