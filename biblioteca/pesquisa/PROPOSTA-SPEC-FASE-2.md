@@ -10,8 +10,8 @@ Decisão de Edu (2026-11-11): nenhum teste em laboratório (HTB, THM) até o sca
 
 | Etapa | Conteúdo | Situação |
 | --- | --- | --- |
-| 2a | Orquestração: worker, ciclo de vida, runner, confirmação | esta proposta |
-| 2b | Recon com nmap travado | esta proposta |
+| 2a | Orquestração: worker, ciclo de vida, runner, confirmação | **implementada** (feat/fase-2a) |
+| 2b | Recon com nmap travado | próxima |
 | 3 | Checks web | spec a escrever |
 | 4 | Checks de API (OpenAPI) | spec a escrever |
 | 5 | Checks de MCP | spec a escrever |
@@ -139,7 +139,9 @@ Cada um precisa passar; juntos provam que a fase respeita o escopo.
 - Busca no código não encontra `net.connect`, `tls.connect`, `fetch(`, `axios` nem `spawn` de `nmap` fora de `packages/http`.
 - Revisão humana de Edu registrada nos PRs (as duas etapas mexem em `packages/http`).
 
-## Decisões (D1 fechada; D2 a D7 aguardam Edu)
+## Decisões (todas fechadas por Edu em 2026-11-11)
+
+> Edu aprovou: **D2** rede do lab local `10.250.0.0/24`; **D3** campo `Scan.confirmedAt`; **D4 a D7** recomendações aceitas. Etapa 2a implementada na branch `feat/fase-2a` (decisões de implementação em `FASE-2A.md`).
 
 **D1. Como descobrir portas: DECIDIDA, nmap travado.** Edu pediu o modo mais viável e com o melhor conjunto de informações. O nmap entrega detecção de serviço e versão, CPE e leitura de certificado, coisas que um probe próprio só alcançaria reimplementando o nmap. O risco que eu apontava (escapar do rate limit e do IP fixado) é tratado assim: só IPs já validados, `argv` de lista fechada sem entrada do chamador, `-sT` sem pacotes forjados, taxa vinda do menor entre perfil e escopo, auditoria `tool.exec` e, no worker de lab, a segunda camada do firewall do `vpn` (default DROP, só `tun+` para os CIDRs do lab). A troca em relação à versão 1 desta proposta: a detecção de versão do nmap envia sondas de protocolo (por exemplo um `GET /` ou um ClientHello), o que vai além de ler o banner. Isso é prática padrão de reconhecimento e não é exploração, mas muda a decisão D5 abaixo.
 
