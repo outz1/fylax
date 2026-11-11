@@ -153,7 +153,7 @@ Cada um precisa passar; juntos provam que a fase respeita o escopo.
 
 **D4. Concorrência.** Proposta: 1 alvo por vez por host; `--max-rate` e timeouts conforme a tabela de perfis; sem retry em porta fechada.
 
-**D5. `recon.exposed-service` deve confirmar o serviço enviando comandos (ex.: `PING` no Redis)? (revisada)** Recomendação mantida: **não**. A detecção de versão do nmap já identifica o serviço; enviar comandos de aplicação a um serviço sem autenticação está na fronteira entre detecção e exploração (regra 5 do guia). Se Edu quiser, vira uma etapa própria com revisão.
+**D5. `recon.exposed-service` deve confirmar o serviço enviando comandos (ex.: `PING` no Redis)? (revisada)** Recomendação mantida: **não**. (Edu confirmou em 2026-11-11 que as sondas de protocolo da detecção de versão do nmap são aceitáveis; comandos de aplicação por conta própria continuam fora.) A detecção de versão do nmap já identifica o serviço; enviar comandos de aplicação a um serviço sem autenticação está na fronteira entre detecção e exploração (regra 5 do guia). Se Edu quiser, vira uma etapa própria com revisão.
 
 **D6. Fonte passiva externa (crt.sh, DNS passivo).** O `ScopeGuard` bloquearia qualquer fonte de terceiro, por desenho. Recomendação: adiar; se for necessário, criar um cliente de fontes passivas com allowlist própria, auditado à parte, e nunca usado para alcançar o alvo.
 

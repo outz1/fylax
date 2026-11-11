@@ -18,6 +18,11 @@ D11 (2026-11-11): alvo `url` roda só o probe HTTP (`GET` e `HEAD`); o port scan
 D12 (2026-11-11): findings do recon são `info` ou `low` e só comprovam. `recon.exposed-service` usa só a porta e o serviço que o nmap identificou; não envia comando de aplicação (D5 da proposta mantido).
 D13 (2026-11-11): o `LAB_CIDRS` do `.env` é das redes de VPN (HTB e THM). O `worker-local` tem `LAB_CIDRS: 10.250.0.0/24` fixo no compose e não herda o do `.env`.
 
+D14 (2026-11-11): **portão por check** no runner. `ctx.http`, `ctx.nmap` e `emitAsset` recusam qualquer chamada NOVA depois que o check foi cancelado, estourou o timeout ou terminou. Um check que ignora o `AbortSignal` (ou deixa um timer rodando) continua em segundo plano, mas não gera mais tráfego nem grava asset. O `nmap` também recebe o `signal` do check por padrão. Só o que já estava em andamento termina sozinho. Resolve o limite "check que ignora o AbortSignal" da 2a. | fonte: apps/worker/src/processor.ts `runCheck`
+D15 (2026-11-11): **reaper de scans órfãos** (`apps/worker/src/reaper.ts`). Scan `running` cujo job não está mais vivo na fila (concluído, falho ou ausente, por worker morto ou Redis limpo) vira `failed` com motivo, e as tasks em andamento também. Job vivo (ativo, esperando, agendado) nunca é tocado: o BullMQ reentrega sozinho o job de um worker morto e o processador retoma. Roda 30 s depois de iniciar e a cada 5 min, com 2 min de graça, só para as plataformas da fila do worker. Resolve o limite "sem reaper" da 2a.
+D16 (2026-11-11): **LF em todo o repositório** (`.gitattributes` com `* text=auto eol=lf` e `.editorconfig`). O `core.autocrlf=true` do Windows deixava a árvore de trabalho em CRLF, em desacordo com o Prettier, com os containers Linux e com o checksum das migrações do Prisma, e quebrou edições programáticas por padrão de texto. `docs/AGENT-GUIDE.md` e `docs/SPEC-FASE-1.md` (contratos de Edu) não foram tocados: o conteúdo no git já é LF e a árvore deles passa a LF no próximo checkout.
+D17 (2026-11-11): **higiene dos testes**: nenhum teste deixa dado no Postgres (conferido: todas as tabelas em zero depois do `pnpm verify`) e os de fila limpam as três filas, também quando um worker real as consome.
+
 ## Refutado
 
 R1 (2026-11-11): **`--top-ports 100` (standard) e `--top-ports 1000` (deep) da proposta aprovada.** O teste ponta a ponta contra o `lab-redis` voltou vazio. A porta 6379 estava aberta (conferida com nmap direto), mas no ranking de frequência do nmap 7.99 o Redis está na posição 2935, o MongoDB na 3071, o Memcached na 6388 e o Elasticsearch (9200) na 733. Nenhum dos dois perfis os alcançava, e `recon.exposed-service` ficaria cego justamente para esses serviços. Solução: D1 e D2.
@@ -26,10 +31,14 @@ R3 (2026-11-11): timeout padrão de 60 s por check para o port scan. O scan do T
 R4 (2026-11-11): o parser XML (fast-xml-parser) aceita XML truncado e devolvia "nenhum host", ou seja, nmap morto no meio virava "nenhuma porta aberta". Solução: `XMLValidator` antes de interpretar; teste com a saída real cortada em 5 pontos.
 R5 (2026-11-11): usar `String.replace` do JavaScript para editar script shell: a sequência `$'` no texto novo é um padrão especial e inseriu o resto do arquivo. Corrigido restaurando o arquivo do git. Para edições programáticas, usar `split(...).join(...)` ou a ferramenta de edição.
 R6 (2026-11-11): conferir só a contagem `Tests` do vitest. Dois arquivos com erro de sintaxe não compilaram e a contagem (17) parecia apenas menor. Conferir sempre `Test Files` junto.
+R7 (2026-11-11): o teste do pacote `db` gravava um `scope.block` sem `scanId` e nunca o apagava: cada `pnpm verify` deixava uma linha no banco de desenvolvimento (6 acumuladas). Corrigido com um marcador por execução.
+R8 (2026-11-11): o teste de fila assumia que ninguém consome `scans-local` e olhava só os jobs "esperando". Com o lab de pé o `worker-local` consome o job na hora e o teste falhava. Agora olha o job em qualquer estado.
+R9 (2026-11-11): `String.replace` do JavaScript também interpreta `$&`, `$1` e `$'` no texto novo, e as edições com `
+` não casam em arquivo CRLF. As duas causas já tinham derrubado edições: normalizar o fim de linha na leitura e usar `split(...).join(...)`.
 
 ## Limites conhecidos
 
-- A detecção de versão do nmap envia sondas de protocolo (por exemplo `GET /` ou um ClientHello), além de ler o banner. É prática padrão de reconhecimento e não é exploração, mas vai além do que o D5 da proposta descrevia. Decisão de Edu.
+- A detecção de versão do nmap envia sondas de protocolo (por exemplo `GET /` ou um ClientHello), além de ler o banner. É prática padrão de reconhecimento e não é exploração, mas vai além do que o D5 da proposta descrevia. **Confirmado por Edu em 2026-11-11.** Enviar comandos de aplicação por conta própria (ex.: `PING` no Redis) continua fora.
 - O deep (65535 portas) leva cerca de 11 min por host a 100 req/s e é recusado quando o escopo impõe taxa baixa. Para programa, o deep só serve com portas explícitas ou escopo com taxa alta.
 - O nmap só roda no worker de lab (`worker-lab` no vpn e `worker-local`). O worker de bounty precisa do próprio firewall de saída antes de rodar nmap (fase 6).
 - O teste de integração com nmap real (`lab.integration.test.ts`) pula quando o lab não está de pé: rode `pnpm lab:up` antes de `pnpm verify` para exercitá-lo.

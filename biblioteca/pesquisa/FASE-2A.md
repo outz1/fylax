@@ -28,8 +28,8 @@ R4 (2026-11-11): o teste de cancelamento só cobria o check em curso. A mutaçã
 ## Limites conhecidos
 
 - O registro de checks está **vazio**: a 2a entrega a orquestração; os primeiros checks reais (recon) vêm na 2b. Por isso um scan de lab termina `done` com `tasks: 0`.
-- Um check que ignora o `AbortSignal` é abandonado (a corrida o descarta), mas pode continuar executando em segundo plano até terminar sozinho.
-- Não há "reaper": um scan que fica `running` sem reentrega do job (worker morto e BullMQ sem reentregar) permanece `running` até alguém cancelar.
+- ~~Um check que ignora o `AbortSignal` é abandonado, mas pode continuar executando em segundo plano.~~ Mitigado na 2b (D14): ele continua existindo, mas não consegue mais gerar tráfego nem gravar asset.
+- ~~Não há "reaper".~~ Resolvido na 2b (D15).
 - O `msgpackr-extract` (acelerador nativo opcional do BullMQ) fica bloqueado pelo pnpm; a biblioteca usa JavaScript puro.
 - `scans-bounty` não tem worker (fase 6); `run` de scan bounty enfileira e o scan fica `queued`.
 
