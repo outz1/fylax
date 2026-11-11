@@ -60,12 +60,14 @@ Falta, e é o que esta fase constrói:
    | Parâmetro | passive | standard | deep |
    | --- | --- | --- | --- |
    | execução do nmap | **não roda** | roda | roda |
-   | portas | n/a | `--top-ports 100` | `--top-ports 1000` |
+   | portas | n/a | `-p` 1 a 1024 + web alternativas + serviços sensíveis (1045) | `-p 1-65535` (todas) |
    | detecção de versão | n/a | `-sV --version-light` | `-sV --version-intensity 7` |
    | taxa | n/a | `--max-rate 50` | `--max-rate 100` |
    | scripts NSE | n/a | `banner,ssl-cert` | `banner,ssl-cert` |
 
-   Sempre presentes: `-sT` (conexão TCP completa pelo sistema, sem pacotes forjados), `--unprivileged`, `-Pn`, `-n`, `--open`, `--max-retries 1`, `--host-timeout` e `-T3`. Taxa efetiva é o menor valor entre o perfil e o teto do escopo (`decision.maxRequestsPerSecond`).
+   Sempre presentes: `-sT` (conexão TCP completa pelo sistema, sem pacotes forjados), `--unprivileged`, `-Pn`, `-n`, `--open`, `--max-retries 1`, `--host-timeout` (calculado: `ceil(portas / taxa * 2) + 120 s`, máximo 3600 s) e `-T3`. `--exclude-ports` só aparece quando o `outOfScope` exclui portas.
+
+   > **Revisão 5 (2026-11-11, achado no teste ponta a ponta, ver `FASE-2B.md` D1 e R1):** a tabela aprovada usava `--top-ports 100` e `--top-ports 1000`. O Redis (posição 2935 no ranking do nmap) e o MongoDB (3071) não entram em nenhum dos dois, então `recon.exposed-service` ficava cego para eles. O standard passou a ser uma lista explícita e o deep a varrer todas as portas. O `--host-timeout` fixo (5 e 15 min) também foi trocado por um valor calculado, porque taxa baixa de escopo fazia o nmap desistir do host e devolver vazio. Taxa efetiva é o menor valor entre o perfil e o teto do escopo (`decision.maxRequestsPerSecond`).
 
    **Nunca permitidos, por construção:** `-sS`, `-sU`, `-O`, `-A`, `--script` fora da lista, categorias `intrusive`, `exploit`, `brute`, `dos`, `vuln`, `fuzzer`, `--script-args`, `-iL`, `-oN/-oG/-oA`, `--spoof-mac`, `-D`, `-S`, `-f`, `--data*`, `--proxies`. Mudar essa lista exige mudar a spec.
 9. **Módulo `recon`**: usa o `ScopedHttpClient` e o `ScopedNmap`.
@@ -74,7 +76,7 @@ Falta, e é o que esta fase constrói:
    | --- | --- | --- | --- |
    | `recon.resolve` | resolve DNS do alvo (A, AAAA, CNAME) | nenhum (vai para o audit) | passive |
    | `recon.http-probe` | `GET /` e `HEAD /` em URL conhecida, via `ScopedHttpClient` | `url` (status, título, headers de servidor) | passive |
-   | `recon.port-scan` | `ScopedNmap` nas portas do perfil | `port` (número, estado, razão) | standard |
+   | `recon.port-scan` | `ScopedNmap` nas portas do perfil (timeout próprio de 70 min) | `port` (número, estado, razão) | standard |
    | `recon.service-detect` | produto, versão, CPE e banner vindos do nmap | `service` | standard |
    | `recon.tls-info` | certificado vindo do script `ssl-cert` (assunto, SAN, validade, emissor) | `service` com `tls` | standard |
    | `recon.http-discover` | `GET /` nas portas HTTP(S) encontradas, via `ScopedHttpClient` | `url` | standard |
