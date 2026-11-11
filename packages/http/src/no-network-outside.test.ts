@@ -7,8 +7,14 @@ const RAIZ = resolve(__dirname, '../../..');
 const PADROES: Array<[string, RegExp]> = [
   ['fetch(', /\bfetch\s*\(/],
   ['axios', /\baxios\b/],
-  ['http.request', /\bhttps?\.(request|get)\s*\(/],
+  // Só o módulo do Node (`http.request(`). `ctx.http.request(` é o ScopedHttpClient, o uso correto.
+  ['http.request', /(?<![\w.])https?\.(request|get)\s*\(/],
   ['net.connect', /\bnet\.(connect|createConnection)\s*\(/],
+  // `require` escapa da regra de lint (que só olha `import`).
+  [
+    'require de módulo de rede',
+    /require\(\s*['"](node:)?(net|tls|http|https|http2|dgram)['"]\s*\)/,
+  ],
   ['WebSocket', /new\s+WebSocket\s*\(/],
   ['TLS desabilitado', /rejectUnauthorized\s*:\s*false/],
   ['TLS desabilitado (env)', /NODE_TLS_REJECT_UNAUTHORIZED/],
