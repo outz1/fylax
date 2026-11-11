@@ -5,7 +5,7 @@
 ## Você está aqui
 
 - Fase 0: **concluída e mergeada** no `main` (PR #1).
-- Fase 1: **implementada e verificada**, branch `feat/fase-1` (sobre o `main` atual). PR aberto para revisão de Edu; nenhum scan real antes dela. Fase 2 não iniciada.
+- Fase 1: **concluída e mergeada** no `main` (PR #2). Fase 2: **bloqueada aguardando spec**; proposta em `biblioteca/pesquisa/PROPOSTA-SPEC-FASE-2.md`.
 - Últimos números: `pnpm verify` limpo, 92 testes (scope 35, http 26 incluindo 3 de kill switch com Docker, api 31). Critérios de aceite da fase 1 conferidos (ver abaixo).
 - Ambiente: Docker Desktop 29.9 em `F:\Docker`, Node 24, pnpm 10.26. `docker compose up -d` sobe postgres, redis e vpn (vpn fica fechado e não saudável sem `infra/vpn/lab.ovpn`). Banco migrado (`init`) e vazio.
 
@@ -14,13 +14,12 @@
 - [x] Os 10 testes de regressão de escopo passam em `pnpm verify` (1 a 8 em `packages/scope`, 9 em `packages/http/src/client.test.ts`, 10 em `packages/http/src/killswitch.smoke.test.ts`).
 - [x] `pnpm scan -- scope-check <alvo> --program exemplo` imprime decisão e regra; o AuditLog ficou só com `scope.*` e 0 entradas `http.request`.
 - [x] Busca no código não encontra `fetch(`, `axios`, `http.request`, `net.connect` nem TLS desabilitado fora de `packages/http` (teste automático, validado com uma violação plantada).
-- [ ] Revisão humana de Edu registrada no PR antes do merge.
+- [x] Revisão humana de Edu registrada (PR #2 aprovado e mergeado).
 
 ## Próxima ação
 
-1. Edu revisa o PR da fase 1. Itens que pedem atenção: `packages/scope`, `packages/http`, `infra/vpn` e `infra/docker-compose.yml`.
-2. Edu fornece o `.ovpn` do lab (`infra/vpn/lab.ovpn`) e `LAB_CIDRS` no `.env` para testar o OpenVPN real: é o único trecho não coberto por teste.
-3. Só depois da revisão: pedir a `SPEC-FASE-2.md` (recon).
+1. Edu revisa `biblioteca/pesquisa/PROPOSTA-SPEC-FASE-2.md`, responde as decisões D1 a D7 e, se aprovar, move o arquivo para `docs/SPEC-FASE-2.md`. Só então a fase 2 começa.
+2. Edu fornece o `.ovpn` do lab (`infra/vpn/lab.ovpn`) e `LAB_CIDRS` no `.env` para testar o OpenVPN real: é o único trecho da fase 1 não coberto por teste.
 
 ## Pendências
 
@@ -38,6 +37,7 @@
 ## Linha do tempo
 
 <!-- uma linha por sessão, mais recente no topo: AAAA-MM-DD | o que mudou | commit -->
+2026-11-11 | proposta de SPEC-FASE-2 (aguarda aprovação) | ver `git log docs/proposta-spec-fase-2`
 2026-11-11 | README.md do repositório | ver `git log feat/fase-1`
 2026-11-11 | fase 1: Scope Guard, ScopedHttpClient, kill switch (vpn), scope-check, 10 testes de regressão | ver `git log feat/fase-1`
 2026-11-11 | fase 0: monorepo, schema Prisma, API Nest, CLI `scan create`, 25 testes, compose | 74fdd50
