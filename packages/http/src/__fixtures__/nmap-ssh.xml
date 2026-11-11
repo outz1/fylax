@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<?xml-stylesheet href="file:///usr/bin/../share/nmap/nmap.xsl" type="text/xsl"?>
+<!-- Nmap 7.99 scan initiated Wed Nov 11 15:45:31 2026 as: nmap -sT -&#45;unprivileged -Pn -n -&#45;open -p 22,80,443,6379 -sV -&#45;version-light -&#45;script banner,ssl-cert -oX - 10.250.0.12 -->
+<nmaprun scanner="nmap" args="nmap -sT -&#45;unprivileged -Pn -n -&#45;open -p 22,80,443,6379 -sV -&#45;version-light -&#45;script banner,ssl-cert -oX - 10.250.0.12" start="1794411931" startstr="Wed Nov 11 15:45:31 2026" version="7.99" xmloutputversion="1.05">
+<scaninfo type="connect" protocol="tcp" numservices="4" services="22,80,443,6379"/>
+<verbose level="0"/>
+<debugging level="0"/>
+<host starttime="1794411931" endtime="1794411931"><status state="up" reason="user-set" reason_ttl="0"/>
+<address addr="10.250.0.12" addrtype="ipv4"/>
+<hostnames>
+</hostnames>
+<ports><extraports state="closed" count="3">
+<extrareasons reason="conn-refused" count="3" proto="tcp" ports="80,443,6379"/>
+</extraports>
+<port protocol="tcp" portid="22"><state state="open" reason="syn-ack" reason_ttl="0"/><service name="ssh" product="OpenSSH" version="9.7" extrainfo="protocol 2.0" method="probed" conf="10"><cpe>cpe:/a:openbsd:openssh:9.7</cpe></service><script id="banner" output="SSH-2.0-OpenSSH_9.7"/></port>
+</ports>
+<times srtt="220" rttvar="2233" to="100000"/>
+</host>
+<runstats><finished time="1794411931" timestr="Wed Nov 11 15:45:31 2026" summary="Nmap done at Wed Nov 11 15:45:31 2026; 1 IP address (1 host up) scanned in 0.31 seconds" elapsed="0.31" exit="success"/><hosts up="1" down="0" total="1"/>
+</runstats>
+</nmaprun>

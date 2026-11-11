@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<?xml-stylesheet href="file:///usr/bin/../share/nmap/nmap.xsl" type="text/xsl"?>
+<!-- Nmap 7.99 scan initiated Wed Nov 11 15:44:58 2026 as: nmap -sT -&#45;unprivileged -Pn -n -&#45;open -p 22,80,443,6379 -sV -&#45;version-light -&#45;script banner,ssl-cert -oX - 10.250.0.11 -->
+<nmaprun scanner="nmap" args="nmap -sT -&#45;unprivileged -Pn -n -&#45;open -p 22,80,443,6379 -sV -&#45;version-light -&#45;script banner,ssl-cert -oX - 10.250.0.11" start="1794411898" startstr="Wed Nov 11 15:44:58 2026" version="7.99" xmloutputversion="1.05">
+<scaninfo type="connect" protocol="tcp" numservices="4" services="22,80,443,6379"/>
+<verbose level="0"/>
+<debugging level="0"/>
+<host starttime="1794411898" endtime="1794411930"><status state="up" reason="user-set" reason_ttl="0"/>
+<address addr="10.250.0.11" addrtype="ipv4"/>
+<hostnames>
+</hostnames>
+<ports><extraports state="closed" count="3">
+<extrareasons reason="conn-refused" count="3" proto="tcp" ports="22,80,6379"/>
+</extraports>
+<port protocol="tcp" portid="443"><state state="open" reason="syn-ack" reason_ttl="0"/><service name="http" product="nginx" version="1.27.5" tunnel="ssl" method="probed" conf="10"><cpe>cpe:/a:igor_sysoev:nginx:1.27.5</cpe></service><script id="ssl-cert" output="Subject: commonName=fixture.invalid/organizationName=Fylax Lab&#xa;Subject Alternative Name: DNS:fixture.invalid&#xa;Issuer: commonName=fixture.invalid/organizationName=Fylax Lab&#xa;Public Key type: rsa&#xa;Public Key bits: 2048&#xa;Signature Algorithm: sha256WithRSAEncryption&#xa;Not valid before: 2026-11-11T15:36:29&#xa;Not valid after:  2026-11-16T15:36:29&#xa;MD5:     1954 ed9a 9bc1 79f9 9c31 08db b81d e363&#xa;SHA-1:   3231 ad60 3b3f 7d04 cf86 c34d 4df9 0df8 9603 3cfd&#xa;SHA-256: f8a6 0b74 c2d7 54ef 2b4a 9e19 d293 a659 e407 21c9 36d5 37fc 516f 990a 0f54 a780"><table key="subject">
+<elem key="commonName">fixture.invalid</elem>
+<elem key="organizationName">Fylax Lab</elem>
+</table>
+<table key="issuer">
+<elem key="commonName">fixture.invalid</elem>
+<elem key="organizationName">Fylax Lab</elem>
+</table>
+<table key="pubkey">
+<elem key="type">rsa</elem>
+<elem key="bits">2048</elem>
+<elem key="modulus">B958D70CCD0C41A9CE323EDA3894F08BBF278580E95C421646709064C53AD8BE1CFF5846CB619CA93F3EDE4A75C21E9FFBAE99BBE915F0CC07C0800D2BD279BD5C1E57C1B021E63D28E9F9E3F429A239DB14F73E409D99541C17E4428654FB0807A0A7800308A20E0C8C66245BD5AE7BCCF3862C7F3026812E24E05E85B79E994A6CA2BF52FB78CE76FCF0AB627D1FEF04802150EAAA912CF9F588987F18CE5EF96EFAE5CFA49BAAD86A2FEFDCF22F211892EBA448E0F07EE52DDE00DE8C9533A18B301E15E9DB2EA25BB31D1E6AF3C765AA4DA1E8CD97B6413596ACBE98FA299F8BA85011FDF83234EA07EB551D129F1FED5742ECB64DFF974275C140F9FFE3</elem>
+<elem key="exponent">65537</elem>
+</table>
+<table key="extensions">
+<table>
+<elem key="name">X509v3 Subject Key Identifier</elem>
+<elem key="value">C3:52:0D:16:AC:04:14:9C:AB:A0:D3:79:CE:5F:14:F6:F2:B1:80:56</elem>
+</table>
+<table>
+<elem key="name">X509v3 Authority Key Identifier</elem>
+<elem key="value">C3:52:0D:16:AC:04:14:9C:AB:A0:D3:79:CE:5F:14:F6:F2:B1:80:56</elem>
+</table>
+<table>
+<elem key="name">X509v3 Basic Constraints</elem>
+<elem key="value">CA:TRUE</elem>
+<elem key="critical">true</elem>
+</table>
+<table>
+<elem key="name">X509v3 Subject Alternative Name</elem>
+<elem key="value">DNS:fixture.invalid</elem>
+</table>
+</table>
+<elem key="sig_algo">sha256WithRSAEncryption</elem>
+<table key="validity">
+<elem key="notBefore">2026-11-11T15:36:29</elem>
+<elem key="notAfter">2026-11-16T15:36:29</elem>
+</table>
+<elem key="md5">1954ed9a9bc179f99c3108dbb81de363</elem>
+<elem key="sha1">3231ad603b3f7d04cf86c34d4df90df896033cfd</elem>
+<elem key="sha256">f8a60b74c2d754ef2b4a9e19d293a659e40721c936d537fc516f990a0f54a780</elem>
+<elem key="pem">-&#45;&#45;&#45;&#45;BEGIN CERTIFICATE-&#45;&#45;&#45;&#45;&#xa;MIIDWTCCAkGgAwIBAgIUWNiAifQOf8HRpoYv6toLhuDxRbkwDQYJKoZIhvcNAQEL&#xa;BQAwLjEYMBYGA1UEAwwPZml4dHVyZS5pbnZhbGlkMRIwEAYDVQQKDAlGeWxheCBM&#xa;YWIwHhcNMjYxMTExMTUzNjI5WhcNMjYxMTE2MTUzNjI5WjAuMRgwFgYDVQQDDA9m&#xa;aXh0dXJlLmludmFsaWQxEjAQBgNVBAoMCUZ5bGF4IExhYjCCASIwDQYJKoZIhvcN&#xa;AQEBBQADggEPADCCAQoCggEBALlY1wzNDEGpzjI+2jiU8Iu/J4WA6VxCFkZwkGTF&#xa;Oti+HP9YRsthnKk/Pt5KdcIen/uumbvpFfDMB8CADSvSeb1cHlfBsCHmPSjp+eP0&#xa;KaI52xT3PkCdmVQcF+RChlT7CAegp4ADCKIODIxmJFvVrnvM84YsfzAmgS4k4F6F&#xa;t56ZSmyiv1L7eM52/PCrYn0f7wSAIVDqqpEs+fWImH8Yzl75bvrlz6SbqthqL+/c&#xa;8i8hGJLrpEjg8H7lLd4A3oyVM6GLMB4V6dsuoluzHR5q88dlqk2h6M2XtkE1lqy+&#xa;mPopn4uoUBH9+DI06gfrVR0Snx/tV0Lstk3/l0J1wUD5/+MCAwEAAaNvMG0wHQYD&#xa;VR0OBBYEFMNSDRasBBScq6DTec5fFPbysYBWMB8GA1UdIwQYMBaAFMNSDRasBBSc&#xa;q6DTec5fFPbysYBWMA8GA1UdEwEB/wQFMAMBAf8wGgYDVR0RBBMwEYIPZml4dHVy&#xa;ZS5pbnZhbGlkMA0GCSqGSIb3DQEBCwUAA4IBAQBaZn1lPYHix8KHnUqmnzL8K0fW&#xa;q/6zL+bxd1cAMtJdZPCLudd6a1qi7hytWuF2CC2pupe+6+l2QAN55O7gKMi2MRlF&#xa;QEtHnRa9Dif3crwcWkjEbGlqfMZ7ffe3GDnMTuuVrlG2HxwE2YdmCfModK2SKuJo&#xa;F/D3FiQizycTv+5wWck7rtSSzgJj/pvzI8tBBArDNSnQIIKQ/mRXP+3YGkXeUBJM&#xa;nwzxildmcq08GAFMXNS3OV25hJonqSwJKfevpwWyQd1uz1nZXYC3Q+gam35wF8Ht&#xa;UjnQ7IIc6Qf1nrtYJo1xiSCpyonsTFnnQ0CsqbjhzwNQu1Dit+Vq+l20SyEq&#xa;-&#45;&#45;&#45;&#45;END CERTIFICATE-&#45;&#45;&#45;&#45;&#xa;</elem>
+</script></port>
+</ports>
+<times srtt="212" rttvar="2223" to="100000"/>
+</host>
+<runstats><finished time="1794411930" timestr="Wed Nov 11 15:45:30 2026" summary="Nmap done at Wed Nov 11 15:45:30 2026; 1 IP address (1 host up) scanned in 32.31 seconds" elapsed="32.31" exit="success"/><hosts up="1" down="0" total="1"/>
+</runstats>
+</nmaprun>
