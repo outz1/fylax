@@ -1,0 +1,157 @@
+// Schema da fase 0 (docs/SPEC-FASE-1.md, seção "Schema Prisma (fase 0)").
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TargetKind {
+  host
+  url
+  openapi
+  mcp
+}
+
+enum TargetPlatform {
+  htb
+  thm
+  local
+  bounty
+}
+
+enum ScanProfile {
+  passive
+  standard
+  deep
+  bounty
+}
+
+enum ScanStatus {
+  queued
+  running
+  done
+  failed
+  canceled
+}
+
+enum TaskStatus {
+  pending
+  running
+  done
+  failed
+  skipped
+}
+
+enum Severity {
+  info
+  low
+  medium
+  high
+  critical
+}
+
+enum Confidence {
+  low
+  medium
+  high
+}
+
+enum AutomationPolicy {
+  allowed
+  forbidden
+  unspecified
+}
+
+model Program {
+  id         String   @id @default(uuid())
+  platform   String
+  name       String   @unique
+  briefUrl   String
+  inScope    Json // ScopeEntry[]
+  outOfScope Json // ScopeEntry[]
+  rules      Json // ProgramRules
+  reviewedAt DateTime
+  createdAt  DateTime @default(now())
+  targets    Target[]
+}
+
+model Target {
+  id        String         @id @default(uuid())
+  kind      TargetKind
+  value     String
+  platform  TargetPlatform
+  programId String?
+  program   Program?       @relation(fields: [programId], references: [id])
+  createdAt DateTime       @default(now())
+  scans     Scan[]
+
+  @@unique([kind, value, platform])
+}
+
+model Scan {
+  id         String      @id @default(uuid())
+  targetId   String
+  target     Target      @relation(fields: [targetId], references: [id])
+  profile    ScanProfile
+  status     ScanStatus  @default(queued)
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime    @default(now())
+  tasks      Task[]
+  assets     Asset[]
+  findings   Finding[]
+}
+
+model Task {
+  id        String     @id @default(uuid())
+  scanId    String
+  scan      Scan       @relation(fields: [scanId], references: [id])
+  module    String // recon | web | api | mcp
+  status    TaskStatus @default(pending)
+  attempts  Int        @default(0)
+  error     String?
+  createdAt DateTime   @default(now())
+}
+
+model Asset {
+  id        String   @id @default(uuid())
+  scanId    String
+  scan      Scan     @relation(fields: [scanId], references: [id])
+  type      String // port | service | url | endpoint | tool
+  data      Json
+  createdAt DateTime @default(now())
+}
+
+model Finding {
+  id            String     @id @default(uuid())
+  scanId        String
+  scan          Scan       @relation(fields: [scanId], references: [id])
+  checkId       String
+  title         String
+  severity      Severity
+  confidence    Confidence
+  asset         String
+  description   String
+  evidence      Json
+  reproduction  String[]
+  references    String[]
+  dedupKey      String
+  falsePositive Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+
+  @@unique([scanId, dedupKey])
+}
+
+// Toda decisão do Scope Guard e toda ação de rede.
+model AuditLog {
+  id        String   @id @default(uuid())
+  scanId    String?
+  action    String // scope.allow | scope.block | http.request | tool.exec
+  detail    Json
+  createdAt DateTime @default(now())
+
+  @@index([scanId])
+}

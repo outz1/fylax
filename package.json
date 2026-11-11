@@ -1,0 +1,30 @@
+{
+  "name": "fylax",
+  "private": true,
+  "version": "0.0.0",
+  "description": "vulnscan: detecta e comprova vulnerabilidades (sem armar) em alvos autorizados",
+  "packageManager": "pnpm@10.26.1",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @fylax/api dev",
+    "lint": "eslint . && node scripts/check-no-emdash.mjs",
+    "format": "prettier --write .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test",
+    "db:migrate": "pnpm --filter @fylax/api db:migrate",
+    "db:studio": "pnpm --filter @fylax/api db:studio",
+    "scan": "pnpm --filter @fylax/api scan"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.0.0"
+  }
+}

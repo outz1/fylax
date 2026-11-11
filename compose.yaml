@@ -1,0 +1,4 @@
+# Atalho para `docker compose up -d` na raiz (como no AGENT-GUIDE).
+include:
+  - path: infra/docker-compose.yml
+    env_file: .env
